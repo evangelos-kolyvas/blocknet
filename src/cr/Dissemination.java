@@ -38,12 +38,12 @@ public class Dissemination extends Protocol implements Linkable
 
   enum MSGType
   {
-    MINE_BLOCK,
-    SEND_HEADER,
-    REQ_BODY,
-    SEND_BODY,
-    PROCESSING_HEADER,
-    PROCESSING_BODY
+      UPSTREAM__GENERATE_NEW_BLOCK,
+    DOWNSTREAM__RECEIVE_AND_PROCESS_HEADER,
+    DOWNSTREAM__SEND_BODY_REQUEST,
+      UPSTREAM__SEND_BODY,
+    DOWNSTREAM__RECEIVE_AND_PROCESS_BODY,
+    DOWNSTREAM__FORWARD_NEXT_HOP
   }
 
   class Message
@@ -111,80 +111,10 @@ public class Dissemination extends Protocol implements Linkable
 
     switch (msg.type)
     {
-      case SEND_HEADER:
-        if (!receivedHeaders.contains(msg.blockId))
-        {
-          receivedHeaders.add(msg.blockId);  // Mark that I received this header
-          Message m = new Message();
-          m.type = MSGType.PROCESSING_HEADER;
-          m.blockId = msg.blockId;
-          m.replyTo = src;
-          m.hops = msg.hops;  // internal event, no new hop
-          schedule(headerProcessing, m);
-        }
-        break;
-
-      case PROCESSING_HEADER:
-      {
-        Message m = new Message();
-        m.type = MSGType.REQ_BODY;
-        m.blockId = msg.blockId;
-        m.replyTo = null;
-        m.hops = msg.hops;  // sending back to sender, no new hop
-
-        TransportDeltaQ.setBody(false);  // Going to send request for body (==> SMALL)
-        send(msg.replyTo, myPid(), m);
-        break;
-      }
-
-      case REQ_BODY:
-      {
-        assert receivedBodies.contains(msg.blockId): "I should have received this block body if someone is requesting it from me!";
-        Message m = new Message();
-        m.type = MSGType.SEND_BODY;
-        m.blockId = msg.blockId;
-        m.replyTo = null;
-        m.hops = msg.hops;  // responding to downstream peer, no new hop
-
-        TransportDeltaQ.setBody(true);  // Going to send body (==> LARGE)
-        send(src, myPid(), m);
-        break;
-      }
-
-      case SEND_BODY:
-      {
-        assert !receivedBodies.contains(msg.blockId): "I shouldn't have received this block body for a second time!";
-        receivedBodies.add(msg.blockId);  // Mark that I have received this body
-
-        Message m = new Message();
-        m.type = MSGType.PROCESSING_BODY;
-        m.blockId = msg.blockId;
-        m.replyTo = src;
-        m.hops = msg.hops;  // internal event, no new hop
-        schedule(bodyProcessing, m);
-        break;
-      }
-
-      case PROCESSING_BODY:
-      {
-        long timeSinceBlockGeneration = CommonState.getTime() % cycle; // Quick & dirty way to estimate relative time
-        Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
-        System.out.println(timeSinceBlockGeneration+"\t"+msg.replyTo+" -> "+myNode().getID());
-
-        Message m = new Message();
-        m.type = MSGType.SEND_HEADER;
-        m.blockId = msg.blockId;
-        m.replyTo = null;
-        m.hops = msg.hops+1;  // forwarding downstream to the next hop!
-
-        TransportDeltaQ.setBody(false);  // Going to send header (==> SMALL)
-        for (Peer peer: downstreamPeers)
-          send(peer.address, myPid(), m);
-
-        break;
-      }
-
-      case MINE_BLOCK:
+      /*
+       *  Called when a node is chosen (slot leader) to generate a new block
+       */
+      case UPSTREAM__GENERATE_NEW_BLOCK:
       {
         // Pretend I just "received" header and body
         receivedHeaders.add(msg.blockId);  // Mark that I have received this header
@@ -194,10 +124,112 @@ public class Dissemination extends Protocol implements Linkable
 
         // Then forward header to my downstream peers
         Message m = new Message();
-        m.type = MSGType.SEND_HEADER;
+        m.type = MSGType.DOWNSTREAM__RECEIVE_AND_PROCESS_HEADER;
         m.blockId = msg.blockId;
         m.replyTo = null;
         m.hops = msg.hops+1;  // forwarding downstream to the first hop!
+
+        TransportDeltaQ.setBody(false);  // Going to send header (==> SMALL)
+        for (Peer peer: downstreamPeers)
+          send(peer.address, myPid(), m);
+
+        break;
+      }
+
+      /*
+       *  Called when a node receives a header sent by an upstream peer.
+       *  Takes the time needed for processing, and schedules an internal
+       *  event DO_SEND_BODY_REQUEST to be 
+       */
+      case DOWNSTREAM__RECEIVE_AND_PROCESS_HEADER:
+        if (!receivedHeaders.contains(msg.blockId))
+        {
+          receivedHeaders.add(msg.blockId);  // Mark that I received this header
+
+          // Respond to my upstream peer requesting the body
+          Message m = new Message();
+          m.type = MSGType.DOWNSTREAM__SEND_BODY_REQUEST;
+          m.blockId = msg.blockId;
+          m.replyTo = src;
+          m.hops = msg.hops;  // internal event, no new hop
+
+          schedule(headerProcessing, m);
+        }
+        break;
+
+      /*
+       *  Called when a node has completed the processing (validation) of a
+       *  new header it recently received, and it is ready to request the body
+       *  from the respective upstream peer.
+       */
+      case DOWNSTREAM__SEND_BODY_REQUEST:
+      {
+        Message m = new Message();
+        m.type = MSGType.UPSTREAM__SEND_BODY;
+        m.blockId = msg.blockId;
+        m.replyTo = null;
+        m.hops = msg.hops;  // sending back to sender, no new hop
+
+        TransportDeltaQ.setBody(false);  // Going to send request for body (==> SMALL)
+        send(msg.replyTo, myPid(), m);
+        break;
+      }
+
+      /*
+       *  Called when the upstream peer receives a request to send the body.
+       */
+      case UPSTREAM__SEND_BODY:
+      {
+        assert receivedBodies.contains(msg.blockId): "Someone is requesting from me a body I have not received!";
+
+        Message m = new Message();
+        m.type = MSGType.DOWNSTREAM__RECEIVE_AND_PROCESS_BODY;
+        m.blockId = msg.blockId;
+        m.replyTo = null;
+        m.hops = msg.hops;  // responding to downstream peer, no new hop
+
+        TransportDeltaQ.setBody(true);  // Going to send body (==> LARGE)
+        send(src, myPid(), m);
+        break;
+      }
+
+      /*
+       *  Called when a node receives the block body.
+       *  It takes the time needed for processing (body validation), and
+       *  schedules an internal event to proceed with forwarding the
+       *  block further.
+       */
+      case DOWNSTREAM__RECEIVE_AND_PROCESS_BODY:
+      {
+        assert !receivedBodies.contains(msg.blockId): "I shouldn't have received this block body for a second time!";
+
+        receivedBodies.add(msg.blockId);  // Mark that I have received this body
+
+        Message m = new Message();
+        m.type = MSGType.DOWNSTREAM__FORWARD_NEXT_HOP;
+        m.blockId = msg.blockId;
+        m.replyTo = src;
+        m.hops = msg.hops;  // internal event, no new hop
+
+        schedule(bodyProcessing, m);
+        break;
+      }
+
+      /*
+       *  Called when a node has completed the validation of the received block,
+       *  and it proceeds with forwarding its header to all its downstream peers.
+       */
+      case DOWNSTREAM__FORWARD_NEXT_HOP:
+      {
+        long timeSinceBlockGeneration = CommonState.getTime() % cycle; // Quick & dirty way to estimate relative time
+        Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
+        System.out.println(timeSinceBlockGeneration+"\t"+msg.replyTo+" -> "+myNode().getID());
+
+        Message m = new Message();
+        m.type = MSGType.DOWNSTREAM__RECEIVE_AND_PROCESS_HEADER;
+        m.blockId = msg.blockId;
+        m.replyTo = null;
+        m.hops = msg.hops+1;  // forwarding downstream to the next hop!
 
         TransportDeltaQ.setBody(false);  // Going to send header (==> SMALL)
         for (Peer peer: downstreamPeers)
@@ -216,7 +248,7 @@ public class Dissemination extends Protocol implements Linkable
   public void generateBlock(int blockId)
   {
     Message msg = new Message();
-    msg.type = MSGType.MINE_BLOCK;
+    msg.type = MSGType.UPSTREAM__GENERATE_NEW_BLOCK;
     msg.blockId = blockId;
     msg.replyTo = null;
     msg.hops = 0;
