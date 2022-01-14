@@ -19,15 +19,15 @@ import peernet.transport.Address;
 
 public class Dissemination extends Protocol implements Linkable
 {
-  private static final String PAR_HEADER_PROCESSING = "headerProcessing";
-  private static final String PAR_BODY_PROCESSING = "bodyProcessing";
+  private static final String PAR_HEADER_PROCESSING = "header_validation_time";
+  private static final String PAR_BODY_PROCESSING = "body_validation_time";
   private static final String PAR_EXTRAROUNDTRIPS = "extra_tcp_trips";
 
   static int cycle;
   static int pid;
 
-  static int headerProcessing;
-  static int bodyProcessing;
+  static int header_validation_time;
+  static int body_validation_time;
 
   HashSet<Integer> receivedHeaders;
   HashSet<Integer> receivedBodies;
@@ -36,14 +36,31 @@ public class Dissemination extends Protocol implements Linkable
   ArrayList<Peer> downstreamPeers;
 //  ArrayList<Integer> deliveryTimes;
 
+  /**
+   * These are the message types for dissemination. The message name indicates
+   * which node, upstream (UP) or downstream (DN), should take some action,
+   * and the action per se.
+   * 
+   * E.g., UP__GENERATE_NEW_BLOCK is sent to the node that is selected (by a
+   * control) as slot leader and is asked to generate a new block.
+   * 
+   * DN__RECEIVE_AND_PROCESS_HEADER will be sent to a downstream peer to deliver
+   * a header to it. The peer will check whether this corresponds to a new
+   * header, and if so it will schedule a DN__SEND_BODY_REQUEST locally, to
+   * account for the time needed to locally validate the header. When that
+   * latter event is fired, the peer will send an UP__SEND_BODY message to the
+   * corresponding upstream peer. And so on so forth.
+   * 
+   * @author spyros
+   */
   enum MSGType
   {
-      UPSTREAM__GENERATE_NEW_BLOCK,
-    DOWNSTREAM__RECEIVE_AND_PROCESS_HEADER,
-    DOWNSTREAM__SEND_BODY_REQUEST,
-      UPSTREAM__SEND_BODY,
-    DOWNSTREAM__RECEIVE_AND_PROCESS_BODY,
-    DOWNSTREAM__FORWARD_NEXT_HOP
+    UP__GENERATE_NEW_BLOCK,
+    DN__RECEIVE_AND_PROCESS_HEADER,
+    DN__SEND_BODY_REQUEST,
+    UP__SEND_BODY,
+    DN__RECEIVE_AND_PROCESS_BODY,
+    DN__FORWARD_NEXT_HOP
   }
 
   class Message
@@ -68,8 +85,8 @@ public class Dissemination extends Protocol implements Linkable
     super(prefix);
 
     cycle = Configuration.getInt("CYCLE");
-    headerProcessing = Configuration.getInt(prefix+"."+PAR_HEADER_PROCESSING);
-    bodyProcessing = Configuration.getInt(prefix+"."+PAR_BODY_PROCESSING);
+    header_validation_time = Configuration.getInt(prefix+"."+PAR_HEADER_PROCESSING);
+    body_validation_time = Configuration.getInt(prefix+"."+PAR_BODY_PROCESSING);
 
     int extra_round_trips = Configuration.getInt(prefix+"."+PAR_EXTRAROUNDTRIPS);
     TransportDeltaQ.setBodyExtraRoundTrips(extra_round_trips);
@@ -114,7 +131,7 @@ public class Dissemination extends Protocol implements Linkable
       /*
        *  Called when a node is chosen (slot leader) to generate a new block
        */
-      case UPSTREAM__GENERATE_NEW_BLOCK:
+      case UP__GENERATE_NEW_BLOCK:
       {
         // Pretend I just "received" header and body
         receivedHeaders.add(msg.blockId);  // Mark that I have received this header
@@ -124,7 +141,7 @@ public class Dissemination extends Protocol implements Linkable
 
         // Then forward header to my downstream peers
         Message m = new Message();
-        m.type = MSGType.DOWNSTREAM__RECEIVE_AND_PROCESS_HEADER;
+        m.type = MSGType.DN__RECEIVE_AND_PROCESS_HEADER;
         m.blockId = msg.blockId;
         m.replyTo = null;
         m.hops = msg.hops+1;  // forwarding downstream to the first hop!
@@ -141,19 +158,19 @@ public class Dissemination extends Protocol implements Linkable
        *  Takes the time needed for processing, and schedules an internal
        *  event DO_SEND_BODY_REQUEST to be 
        */
-      case DOWNSTREAM__RECEIVE_AND_PROCESS_HEADER:
+      case DN__RECEIVE_AND_PROCESS_HEADER:
         if (!receivedHeaders.contains(msg.blockId))
         {
           receivedHeaders.add(msg.blockId);  // Mark that I received this header
 
           // Respond to my upstream peer requesting the body
           Message m = new Message();
-          m.type = MSGType.DOWNSTREAM__SEND_BODY_REQUEST;
+          m.type = MSGType.DN__SEND_BODY_REQUEST;
           m.blockId = msg.blockId;
           m.replyTo = src;
           m.hops = msg.hops;  // internal event, no new hop
 
-          schedule(headerProcessing, m);
+          schedule(header_validation_time, m);
         }
         break;
 
@@ -162,10 +179,10 @@ public class Dissemination extends Protocol implements Linkable
        *  new header it recently received, and it is ready to request the body
        *  from the respective upstream peer.
        */
-      case DOWNSTREAM__SEND_BODY_REQUEST:
+      case DN__SEND_BODY_REQUEST:
       {
         Message m = new Message();
-        m.type = MSGType.UPSTREAM__SEND_BODY;
+        m.type = MSGType.UP__SEND_BODY;
         m.blockId = msg.blockId;
         m.replyTo = null;
         m.hops = msg.hops;  // sending back to sender, no new hop
@@ -178,12 +195,12 @@ public class Dissemination extends Protocol implements Linkable
       /*
        *  Called when the upstream peer receives a request to send the body.
        */
-      case UPSTREAM__SEND_BODY:
+      case UP__SEND_BODY:
       {
         assert receivedBodies.contains(msg.blockId): "Someone is requesting from me a body I have not received!";
 
         Message m = new Message();
-        m.type = MSGType.DOWNSTREAM__RECEIVE_AND_PROCESS_BODY;
+        m.type = MSGType.DN__RECEIVE_AND_PROCESS_BODY;
         m.blockId = msg.blockId;
         m.replyTo = null;
         m.hops = msg.hops;  // responding to downstream peer, no new hop
@@ -199,19 +216,19 @@ public class Dissemination extends Protocol implements Linkable
        *  schedules an internal event to proceed with forwarding the
        *  block further.
        */
-      case DOWNSTREAM__RECEIVE_AND_PROCESS_BODY:
+      case DN__RECEIVE_AND_PROCESS_BODY:
       {
         assert !receivedBodies.contains(msg.blockId): "I shouldn't have received this block body for a second time!";
 
         receivedBodies.add(msg.blockId);  // Mark that I have received this body
 
         Message m = new Message();
-        m.type = MSGType.DOWNSTREAM__FORWARD_NEXT_HOP;
+        m.type = MSGType.DN__FORWARD_NEXT_HOP;
         m.blockId = msg.blockId;
         m.replyTo = src;
         m.hops = msg.hops;  // internal event, no new hop
 
-        schedule(bodyProcessing, m);
+        schedule(body_validation_time, m);
         break;
       }
 
@@ -219,14 +236,14 @@ public class Dissemination extends Protocol implements Linkable
        *  Called when a node has completed the validation of the received block,
        *  and it proceeds with forwarding its header to all its downstream peers.
        */
-      case DOWNSTREAM__FORWARD_NEXT_HOP:
+      case DN__FORWARD_NEXT_HOP:
       {
         long timeSinceBlockGeneration = CommonState.getTime() % cycle; // Quick & dirty way to estimate relative time
         Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
         System.out.println(timeSinceBlockGeneration+"\t"+msg.replyTo+" -> "+myNode().getID());
 
         Message m = new Message();
-        m.type = MSGType.DOWNSTREAM__RECEIVE_AND_PROCESS_HEADER;
+        m.type = MSGType.DN__RECEIVE_AND_PROCESS_HEADER;
         m.blockId = msg.blockId;
         m.replyTo = null;
         m.hops = msg.hops+1;  // forwarding downstream to the next hop!
@@ -248,7 +265,7 @@ public class Dissemination extends Protocol implements Linkable
   public void generateBlock(int blockId)
   {
     Message msg = new Message();
-    msg.type = MSGType.UPSTREAM__GENERATE_NEW_BLOCK;
+    msg.type = MSGType.UP__GENERATE_NEW_BLOCK;
     msg.blockId = blockId;
     msg.replyTo = null;
     msg.hops = 0;
