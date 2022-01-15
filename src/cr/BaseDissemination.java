@@ -17,13 +17,13 @@ import peernet.transport.Address;
 
 
 
-public class Dissemination extends Protocol implements Linkable
+public abstract class BaseDissemination extends Protocol implements Linkable
 {
   private static final String PAR_HEADER_PROCESSING = "header_validation_time";
   private static final String PAR_BODY_PROCESSING = "body_validation_time";
-  private static final String PAR_EXTRAROUNDTRIPS = "extra_tcp_trips";
+  private static final String PAR_EXTRA_ROUND_TRIPS = "extra_tcp_trips";
 
-  static int cycle;
+  //static int cycle;
   static int pid;
 
   static int header_validation_time;
@@ -32,9 +32,8 @@ public class Dissemination extends Protocol implements Linkable
   HashSet<Integer> receivedHeaders;
   HashSet<Integer> receivedBodies;
 
-  ArrayList<Peer> upstreamPeers;
+//  ArrayList<Peer> upstreamPeers;
   ArrayList<Peer> downstreamPeers;
-//  ArrayList<Integer> deliveryTimes;
 
   /**
    * These are the message types for dissemination. The message name indicates
@@ -68,27 +67,27 @@ public class Dissemination extends Protocol implements Linkable
     int blockId;
     Address replyTo;
     MSGType type;
-    int hops;
+    int hops;        // number of hops so far (for miner, hops=0)  
+    long time;       // this block's generation time
 
     public String toString()
     {
-//      return "Block "+blockId+" time "+time+" miner "+miner;
-      return "<"+type+","+blockId+","+replyTo+","+hops+">";
+      return "<"+type+","+blockId+","+time+","+replyTo+","+hops+">";
     }
   }
 
 
   
 
-  public Dissemination(String prefix)
+  public BaseDissemination(String prefix)
   {
     super(prefix);
 
-    cycle = Configuration.getInt("CYCLE");
+//    cycle = Configuration.getInt("CYCLE");
     header_validation_time = Configuration.getInt(prefix+"."+PAR_HEADER_PROCESSING);
     body_validation_time = Configuration.getInt(prefix+"."+PAR_BODY_PROCESSING);
 
-    int extra_round_trips = Configuration.getInt(prefix+"."+PAR_EXTRAROUNDTRIPS);
+    int extra_round_trips = Configuration.getInt(prefix+"."+PAR_EXTRA_ROUND_TRIPS);
     TransportDeltaQ.setBodyExtraRoundTrips(extra_round_trips);
 
     pid = myPid();
@@ -98,10 +97,10 @@ public class Dissemination extends Protocol implements Linkable
 
   public Object clone()
   {
-    Dissemination d = (Dissemination) super.clone();
+    BaseDissemination d = (BaseDissemination) super.clone();
 
-    d.upstreamPeers = new ArrayList<>(10);
-    d.downstreamPeers = new ArrayList<>(10);
+//    d.upstreamPeers = new ArrayList<>();
+    d.downstreamPeers = new ArrayList<>();
 
     d.receivedHeaders = new HashSet<>();
     d.receivedBodies = new HashSet<>();
@@ -111,11 +110,11 @@ public class Dissemination extends Protocol implements Linkable
 
 
 
-  @Override
-  public void nextCycle(int schedId)
-  {
-    // TODO Auto-generated method stub
-  }
+//  @Override
+//  public void nextCycle(int schedId)
+//  {
+//    // TODO Auto-generated method stub
+//  }
 
 
 
@@ -136,8 +135,9 @@ public class Dissemination extends Protocol implements Linkable
         // Pretend I just "received" header and body
         receivedHeaders.add(msg.blockId);  // Mark that I have received this header
         receivedBodies.add(msg.blockId);  // Mark that I have received this body
-        long timeSinceBlockGeneration = CommonState.getTime() % cycle; // Quick & dirty way to estimate relative time
-        Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
+//        long timeSinceBlockGeneration = CommonState.getTime() % cycle; // Quick & dirty way to estimate relative time
+//        Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
+        hookReceivedBody(msg.blockId, CommonState.getTime()-msg.time, msg.hops);
 
         // Then forward header to my downstream peers
         Message m = new Message();
@@ -238,9 +238,9 @@ public class Dissemination extends Protocol implements Linkable
        */
       case DN__FORWARD_NEXT_HOP:
       {
-        long timeSinceBlockGeneration = CommonState.getTime() % cycle; // Quick & dirty way to estimate relative time
-        Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
-        System.out.println(timeSinceBlockGeneration+"\t"+msg.replyTo+" -> "+myNode().getID());
+//        long timeSinceBlockGeneration = CommonState.getTime() % cycle; // Quick & dirty way to estimate relative time
+//        Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
+//        System.out.println(timeSinceBlockGeneration+"\t"+msg.replyTo+" -> "+myNode().getID());
 
         Message m = new Message();
         m.type = MSGType.DN__RECEIVE_AND_PROCESS_HEADER;
@@ -269,88 +269,42 @@ public class Dissemination extends Protocol implements Linkable
     msg.blockId = blockId;
     msg.replyTo = null;
     msg.hops = 0;
+    msg.time = CommonState.getTime();
 
     processEvent(null,  msg);
   }
 
 
 
-  public void addSubscriber(Peer neighbor)
+  public void addDownstreamPeer(Peer neighbor)
   {
     downstreamPeers.add(neighbor);
   }
 
 
 
-  public void removeSubscriber(Peer neighbor)
+  public void removeDownstreamPeer(Peer neighbor)
   {
     downstreamPeers.remove(neighbor);
   }
 
 
 
-  @Override
-  public void onKill()
+  static protected BaseDissemination getDissProt(int i)
   {
-    // TODO Auto-generated method stub
-    
-  }
-
-
-
-
-  @Override
-  public int degree()
-  {
-    return downstreamPeers.size();
-  }
-
-
-
-
-  @Override
-  public Peer getNeighbor(int i)
-  {
-    return downstreamPeers.get(i);
-  }
-
-
-
-
-  @Override
-  public boolean addNeighbor(Peer neighbor)
-  {
-    if (upstreamPeers.contains(neighbor))
-      return false;
-
-    // Add neighbor to my hotPeers
-    upstreamPeers.add(neighbor);
-
-    // Add myself to neighbor's subscribers
-    getDiss((int)neighbor.getID()).addSubscriber(myPeer());
-
-    return true;
-  }
-
-
-
-  @Override
-  public boolean contains(Peer neighbor)
-  {
-    return upstreamPeers.contains(neighbor);
-  }
-
-
-
-  static private Dissemination getDiss(int i)
-  {
-    return ((Dissemination)Network.get(i).getProtocol(pid));
+    return ((BaseDissemination) Network.get(i).getProtocol(pid));
   }
 
 
 
   public String toString()
   {
-    return "Diss "+myNode().getID()+" ("+upstreamPeers.size()+" up, "+downstreamPeers.size()+" down)";
+    return "BaseDissemination "+myNode().getID()+" ("+downstreamPeers.size()+" down)";
   }
+
+
+
+  protected abstract void hookReceivedHeader();
+
+  protected abstract void hookReceivedBody(int blockId, long l, int hops);
 }

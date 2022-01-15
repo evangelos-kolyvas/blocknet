@@ -32,7 +32,7 @@ public class BlockGeneration implements Control
     if (blockId == blocks)
       return true;
 
-    Dissemination d = null;
+    BaseDissemination d = null;
 
     do
     {
@@ -42,8 +42,8 @@ public class BlockGeneration implements Control
       r = blockId;
       System.out.print("Mining block at node "+r);
 
-      // Get that node's Dissemination protocol
-      d = (Dissemination) Network.get(r).getProtocol(disseminationPid);
+      // Get that node's BaseDissemination protocol
+      d = (BaseDissemination) Network.get(r).getProtocol(disseminationPid);
 
       // Make sure that node has at least two downstream peers
     } while (d.downstreamPeers.size() < 2);
