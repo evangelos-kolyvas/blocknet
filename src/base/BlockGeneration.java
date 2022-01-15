@@ -2,7 +2,7 @@
  * Created on Nov 6, 2020 by Spyros Voulgaris
  *
  */
-package cr;
+package base;
 
 import peernet.config.Configuration;
 import peernet.core.CommonState;

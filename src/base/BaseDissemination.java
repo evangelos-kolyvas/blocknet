@@ -2,7 +2,7 @@
  * Created on May 13, 2021 by Spyros Voulgaris
  *
  */
-package cr;
+package base;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -62,7 +62,7 @@ public abstract class BaseDissemination extends Protocol implements Linkable
     DN__FORWARD_NEXT_HOP
   }
 
-  class Message
+  class Message implements Cloneable
   {
     int blockId;
     Address replyTo;
@@ -73,6 +73,19 @@ public abstract class BaseDissemination extends Protocol implements Linkable
     public String toString()
     {
       return "<"+type+","+blockId+","+time+","+replyTo+","+hops+">";
+    }
+
+    public Object clone()
+    {
+      try
+      {
+        return super.clone();
+      }
+      catch (CloneNotSupportedException e)
+      {
+        e.printStackTrace();
+        return null;
+      }
     }
   }
 
@@ -135,8 +148,8 @@ public abstract class BaseDissemination extends Protocol implements Linkable
         // Pretend I just "received" header and body
         receivedHeaders.add(msg.blockId);  // Mark that I have received this header
         receivedBodies.add(msg.blockId);  // Mark that I have received this body
-//        long timeSinceBlockGeneration = CommonState.getTime() % cycle; // Quick & dirty way to estimate relative time
-//        Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
+
+        // Stats
         hookReceivedBody(msg.blockId, CommonState.getTime()-msg.time, msg.hops);
 
         // Then forward header to my downstream peers
@@ -145,6 +158,9 @@ public abstract class BaseDissemination extends Protocol implements Linkable
         m.blockId = msg.blockId;
         m.replyTo = null;
         m.hops = msg.hops+1;  // forwarding downstream to the first hop!
+//        Message m = (Message) msg.clone();
+//        m.type = MSGType.DN__RECEIVE_AND_PROCESS_HEADER;
+//        m.hops++;  // forwarding downstream to the first hop!
 
         TransportDeltaQ.setBody(false);  // Going to send header (==> SMALL)
         for (Peer peer: downstreamPeers)
@@ -304,7 +320,7 @@ public abstract class BaseDissemination extends Protocol implements Linkable
 
 
 
-  protected abstract void hookReceivedHeader();
+  protected abstract void hookReceivedHeader(int blockId, long elapsedTime, int hops);
 
-  protected abstract void hookReceivedBody(int blockId, long l, int hops);
+  protected abstract void hookReceivedBody(int blockId, long elapsedTime, int hops);
 }

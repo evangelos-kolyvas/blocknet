@@ -2,7 +2,7 @@
  * Created on May 13, 2021 by Spyros Voulgaris
  *
  */
-package cr;
+package prot;
 
 import peernet.config.Configuration;
 import peernet.core.CommonState;
@@ -146,8 +146,8 @@ public class InitializerCR implements Control
   public boolean execute()
   {
     setCloseLinks();
-    //setRandomLinks();
-    setPerfectMatchingRandomLinks();
+    setRandomLinks();
+    //setPerfectMatchingRandomLinks();
 
     return false;
   }

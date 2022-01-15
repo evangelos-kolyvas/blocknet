@@ -2,7 +2,7 @@
  * Created on Nov 6, 2020 by Spyros Voulgaris
  *
  */
-package cr;
+package base;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
