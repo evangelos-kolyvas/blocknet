@@ -18,7 +18,7 @@ import peernet.core.Peer;
  * @author spyros
  *
  */
-public class Dissemination extends BaseDissemination
+public class DisseminationFixed extends BaseDissemination
 {
   ArrayList<Peer> upstreamPeers;
   ArrayList<Peer> downstreamPeers;
@@ -27,9 +27,21 @@ public class Dissemination extends BaseDissemination
   ArrayList<Integer> deliveryTimes;
 
 
-  public Dissemination(String prefix)
+  public DisseminationFixed(String prefix)
   {
     super(prefix);
+    upstreamPeers = new ArrayList<>();
+    downstreamPeers = new ArrayList<>();
+  }
+
+
+
+  public Object clone()
+  {
+    DisseminationFixed d = (DisseminationFixed) super.clone();
+    d.upstreamPeers = (ArrayList<Peer>) upstreamPeers.clone();
+    d.downstreamPeers = (ArrayList<Peer>) downstreamPeers.clone();
+    return d;
   }
 
 
@@ -37,8 +49,6 @@ public class Dissemination extends BaseDissemination
   @Override
   public void nextCycle(int schedId)
   {
-    // TODO Auto-generated method stub
-    
   }
 
 
@@ -67,13 +77,11 @@ public class Dissemination extends BaseDissemination
 
 
 
-
   @Override
   public Peer getNeighbor(int i)
   {
     return downstreamPeers.get(i);
   }
-
 
 
 

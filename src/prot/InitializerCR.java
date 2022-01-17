@@ -44,6 +44,13 @@ public class InitializerCR implements Control
 
 
 
+  private int latency(int i, int j)
+  {
+    return RouterNetwork.getLatency(j % RouterNetwork.getSize(), i % RouterNetwork.getSize());
+  }
+
+
+
   private void setCloseLinks()
   {
     if (paramC == 0)
@@ -58,7 +65,7 @@ public class InitializerCR implements Control
       Peer thisPeer = thisNode.getProtocol(pid).myPeer();
 
       for (int j=0; j<Network.size(); j++)
-        distances[j] = RouterNetwork.getLatency(j % RouterNetwork.getSize(), i % RouterNetwork.getSize());  // latency j -> i
+        distances[j] = latency(j,i) + latency(i,j);  // round-trip time
 
       // Find the paramC+1 nodes with lowest latency (+1 because self is one of them)
       QuickSelect.shuffle();

@@ -39,7 +39,6 @@ public class BlockGeneration implements Control
       // Pick a random node as miner
       int r = CommonState.r.nextInt(Network.size());
 
-      r = blockId;
       System.out.print("Mining block at node "+r);
 
       // Get that node's BaseDissemination protocol
@@ -52,7 +51,7 @@ public class BlockGeneration implements Control
     // Generate a block on it
     d.generateBlock(blockId++);
 
-    //System.err.print("\r#block "+blockId);
+    System.err.print("\r#block "+blockId);
 
     return false;
   }
