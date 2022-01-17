@@ -153,14 +153,9 @@ public abstract class BaseDissemination extends Protocol implements Linkable
         hookReceivedBody(msg.blockId, CommonState.getTime()-msg.time, msg.hops);
 
         // Then forward header to my downstream peers
-        Message m = new Message();
+        Message m = (Message) msg.clone();
         m.type = MSGType.DN__RECEIVE_AND_PROCESS_HEADER;
-        m.blockId = msg.blockId;
-        m.replyTo = null;
-        m.hops = msg.hops+1;  // forwarding downstream to the first hop!
-//        Message m = (Message) msg.clone();
-//        m.type = MSGType.DN__RECEIVE_AND_PROCESS_HEADER;
-//        m.hops++;  // forwarding downstream to the first hop!
+        m.hops++;  // forwarding downstream to the first hop!
 
         TransportDeltaQ.setBody(false);  // Going to send header (==> SMALL)
         for (Peer peer: downstreamPeers)
@@ -180,11 +175,9 @@ public abstract class BaseDissemination extends Protocol implements Linkable
           receivedHeaders.add(msg.blockId);  // Mark that I received this header
 
           // Respond to my upstream peer requesting the body
-          Message m = new Message();
+          Message m = (Message) msg.clone();
           m.type = MSGType.DN__SEND_BODY_REQUEST;
-          m.blockId = msg.blockId;
           m.replyTo = src;
-          m.hops = msg.hops;  // internal event, no new hop
 
           schedule(header_validation_time, m);
         }
@@ -197,11 +190,8 @@ public abstract class BaseDissemination extends Protocol implements Linkable
        */
       case DN__SEND_BODY_REQUEST:
       {
-        Message m = new Message();
+        Message m = (Message) msg.clone();
         m.type = MSGType.UP__SEND_BODY;
-        m.blockId = msg.blockId;
-        m.replyTo = null;
-        m.hops = msg.hops;  // sending back to sender, no new hop
 
         TransportDeltaQ.setBody(false);  // Going to send request for body (==> SMALL)
         send(msg.replyTo, myPid(), m);
@@ -215,11 +205,8 @@ public abstract class BaseDissemination extends Protocol implements Linkable
       {
         assert receivedBodies.contains(msg.blockId): "Someone is requesting from me a body I have not received!";
 
-        Message m = new Message();
+        Message m = (Message) msg.clone();
         m.type = MSGType.DN__RECEIVE_AND_PROCESS_BODY;
-        m.blockId = msg.blockId;
-        m.replyTo = null;
-        m.hops = msg.hops;  // responding to downstream peer, no new hop
 
         TransportDeltaQ.setBody(true);  // Going to send body (==> LARGE)
         send(src, myPid(), m);
@@ -238,11 +225,9 @@ public abstract class BaseDissemination extends Protocol implements Linkable
 
         receivedBodies.add(msg.blockId);  // Mark that I have received this body
 
-        Message m = new Message();
+        Message m = (Message) msg.clone();
         m.type = MSGType.DN__FORWARD_NEXT_HOP;
-        m.blockId = msg.blockId;
         m.replyTo = src;
-        m.hops = msg.hops;  // internal event, no new hop
 
         schedule(body_validation_time, m);
         break;
@@ -258,11 +243,12 @@ public abstract class BaseDissemination extends Protocol implements Linkable
 //        Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
 //        System.out.println(timeSinceBlockGeneration+"\t"+msg.replyTo+" -> "+myNode().getID());
 
-        Message m = new Message();
+        // Stats
+        hookReceivedBody(msg.blockId, CommonState.getTime()-msg.time, msg.hops);
+
+        Message m = (Message) msg.clone();
         m.type = MSGType.DN__RECEIVE_AND_PROCESS_HEADER;
-        m.blockId = msg.blockId;
-        m.replyTo = null;
-        m.hops = msg.hops+1;  // forwarding downstream to the next hop!
+        m.hops++;  // forwarding downstream to the next hop!
 
         TransportDeltaQ.setBody(false);  // Going to send header (==> SMALL)
         for (Peer peer: downstreamPeers)
