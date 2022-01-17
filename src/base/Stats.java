@@ -12,45 +12,63 @@ import java.util.Collections;
 import java.util.HashMap;
 
 import peernet.config.Configuration;
+import peernet.core.CommonState;
 import peernet.core.Control;
 import peernet.core.Network;
 
 public class Stats implements Control
 {
-  static ArrayList<Long>[] deliveryTimes;
-  static HashMap<Integer, Integer>[] deliveryHops;
+  //static ArrayList<Long>[] deliveryTimes;
+
+  // One ArrayList<Long> per block
+  static ArrayList<ArrayList<Long>> deliveryTimesArray;
+  static ArrayList<Long> currentDeliveryTimes;
+
+  // One HashMap per block
+  static ArrayList<HashMap<Integer, Integer>> deliveryHopsArray;
+  static HashMap<Integer, Integer> currentDeliveryHops;
 
   int disseminationPid;
-  int blocks;
   String filebase;
+
+  int round = 0;
+  static int currentBlock = -1;
 
 
 
   public Stats(String prefix)
   {
     disseminationPid = Configuration.getPid(prefix + ".protocol");
-    blocks = Configuration.getInt(prefix + ".blocks");
     filebase = Configuration.getString("LOGFILE", null);
     if (filebase.isEmpty())
       filebase = null;
 
-    deliveryTimes = new ArrayList[blocks];
-    deliveryHops = new HashMap[blocks];
-
-    for (int i=0; i<blocks; i++)
-    {
-      deliveryTimes[i] = new ArrayList<>();
-      deliveryHops[i] = new HashMap<>();
-    }
+    //XXX deliveryTimes = new ArrayList[blocks];
+    deliveryTimesArray = new ArrayList<ArrayList<Long>>();
+    //XXX deliveryHops = new HashMap[blocks];
+    deliveryHopsArray = new ArrayList<HashMap<Integer,Integer>>();
   }
 
 
 
   public static void reportDelivery(int blockId, long time, int hops)
   {
-    deliveryTimes[blockId].add(time);
-    int h = deliveryHops[blockId].getOrDefault(hops, Integer.valueOf(0));
-    deliveryHops[blockId].put(hops, h+1);
+    if (blockId != currentBlock)
+    {
+      currentBlock = blockId;
+
+      currentDeliveryTimes = new ArrayList<>();
+      deliveryTimesArray.add(currentDeliveryTimes);
+
+      currentDeliveryHops = new HashMap<Integer,Integer>();
+      deliveryHopsArray.add(currentDeliveryHops);
+    }
+
+    //XXX deliveryTimes[blockId].add(time);
+    currentDeliveryTimes.add(time);
+    //XXX int h = deliveryHops[blockId].getOrDefault(hops, Integer.valueOf(0));
+    int h = currentDeliveryHops.getOrDefault(hops, Integer.valueOf(0));
+    currentDeliveryHops.put(hops, h+1);
   }
 
 
@@ -61,11 +79,18 @@ public class Stats implements Control
       return System.out;
     else
     {
-      String filename = filebase + "." + extension;
+      String filename;
+      if (round==0)
+        filename = filebase + "." + extension;
+      else
+        filename = filebase + "_" + String.format("%03d",round) + "." + extension;
+
       PrintStream out = new PrintStream(filename);
       return out;
     }
   }
+
+
 
   /**
    * Prints delivery times for all blocks
@@ -76,7 +101,7 @@ public class Stats implements Control
     PrintStream out = getOutputStream("times");
     out.println("#time\tnodes");
 
-    for (ArrayList<Long> times: deliveryTimes)
+    for (ArrayList<Long> times: deliveryTimesArray)
     {
       int uninformedNodes = Network.size();
       for (long time: times)
@@ -97,10 +122,11 @@ public class Stats implements Control
     PrintStream out = getOutputStream("times.avg");
     out.println("#time\tnodes");
 
-    int uninformedNodes = Network.size() * blocks;
+    int numBlocks = deliveryTimesArray.size();
+    int uninformedNodes = Network.size() * numBlocks;
     ArrayList<Long> all = new ArrayList<>(uninformedNodes);
 
-    for (ArrayList<Long> times: deliveryTimes)
+    for (ArrayList<Long> times: deliveryTimesArray)
       all.addAll(times);
 
     Collections.sort(all);
@@ -112,7 +138,7 @@ public class Stats implements Control
       time = t;
       if (time != prevTime)
       {
-        out.println(prevTime+"\t"+uninformedNodes/(double)blocks);
+        out.println(prevTime+"\t"+uninformedNodes/(double)numBlocks);
         prevTime = time;
       }
       uninformedNodes--;
@@ -133,12 +159,16 @@ public class Stats implements Control
     for (int i=0; i<Network.size(); i++)
       deliveryTimesSum.add(0L);
 
-    for (ArrayList<Long> times: deliveryTimes)
+    int count=0;
+    for (ArrayList<Long> times: deliveryTimesArray)
+    {
       for (int i=0; i<Network.size(); i++)
         deliveryTimesSum.set(i, deliveryTimesSum.get(i)+times.get(i));
+    }
 
+    int numBlocks = deliveryTimesArray.size();
     for (int i=0; i<Network.size(); i++)
-      out.println(deliveryTimesSum.get(i)/(double)blocks+"\t"+(Network.size()-i));
+      out.println(deliveryTimesSum.get(i)/(double)numBlocks + "\t"+(Network.size()-i));
 
     out.print("\n\n");
     out.close();
@@ -153,7 +183,7 @@ public class Stats implements Control
 
     HashMap<Integer,Integer> avg = new HashMap<>();
 
-    for (HashMap<Integer,Integer> hopsForBlock: deliveryHops)
+    for (HashMap<Integer,Integer> hopsForBlock: deliveryHopsArray)
     {
       int hops = 0;
       int count;
@@ -179,11 +209,12 @@ public class Stats implements Control
     out.println("#hops\tcount%");
     int hops = 0;
     int count;
+    int numBlocks = deliveryHopsArray.size();
     while ( (count=avg.getOrDefault(hops, Integer.valueOf(-1))) >= 0)
     {
       // output the number of nodes that received this block in 'count' hops
 //      out.format("%d\t%f\n", hops, count/(double)blocks);
-      out.println(hops + "\t" + count/(double)blocks);
+      out.println(hops + "\t" + count/(double)numBlocks);
 
       // Increment 'hops'
       hops++;
@@ -225,13 +256,22 @@ public class Stats implements Control
   @Override
   public boolean execute()
   {
+    if (CommonState.getTime() == 0)
+      return false;
+
+    round++;
+
     //System.out.println("Starting to compute stats!");
     try
     {
       printTimesAvgPerTime();
-      printTimesAvgPerPercentile();
-      printAllTimes();
-      printAllHops();
+      //printTimesAvgPerPercentile();
+      //printAllTimes();
+      //printAllHops();
+
+      // Finally, reset all data, to prepare for next measurements
+      deliveryTimesArray.clear();
+      deliveryHopsArray.clear();
     }
     catch (IOException e)
     {
