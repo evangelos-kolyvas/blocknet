@@ -24,7 +24,7 @@ public abstract class BaseDissemination extends Protocol implements Linkable
   private static final String PAR_EXTRA_ROUND_TRIPS = "extra_tcp_trips";
 
   //static int cycle;
-  static int pid;
+  public static int pid;
 
   static int header_validation_time;
   static int body_validation_time;
@@ -170,6 +170,8 @@ public abstract class BaseDissemination extends Protocol implements Linkable
        *  event DO_SEND_BODY_REQUEST to be 
        */
       case DN__RECEIVE_AND_PROCESS_HEADER:
+        hookReceivedHeader(msg.blockId, CommonState.getTime()-msg.time, msg.hops, src);
+
         if (!receivedHeaders.contains(msg.blockId))
         {
           receivedHeaders.add(msg.blockId);  // Mark that I received this header
@@ -252,13 +254,17 @@ public abstract class BaseDissemination extends Protocol implements Linkable
 
         TransportDeltaQ.setBody(false);  // Going to send header (==> SMALL)
         for (Peer peer: downstreamPeers)
+        {
+          if (peer.address.equals(msg.replyTo))  // do not send block back to the node that gave it to me!
+            continue;
           send(peer.address, myPid(), m);
+        }
 
         break;
       }
 
       default:
-        assert false: "How did we get here?!";
+        assert false: "How did we end up here?!";
     }
   }
 
@@ -306,7 +312,7 @@ public abstract class BaseDissemination extends Protocol implements Linkable
 
 
 
-  protected abstract void hookReceivedHeader(int blockId, long elapsedTime, int hops);
+  protected abstract void hookReceivedHeader(int blockId, long elapsedTime, int hops, Address from);
 
   protected abstract void hookReceivedBody(int blockId, long elapsedTime, int hops);
 }

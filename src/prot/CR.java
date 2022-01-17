@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import base.BaseDissemination;
 import base.Stats;
 import peernet.core.Peer;
+import peernet.transport.Address;
 
 /**
  * Executes dissemination based on a static overlay.
@@ -18,7 +19,7 @@ import peernet.core.Peer;
  * @author spyros
  *
  */
-public class DisseminationFixed extends BaseDissemination
+public class CR extends BaseDissemination
 {
   ArrayList<Peer> upstreamPeers;
   ArrayList<Peer> downstreamPeers;
@@ -27,7 +28,7 @@ public class DisseminationFixed extends BaseDissemination
   ArrayList<Integer> deliveryTimes;
 
 
-  public DisseminationFixed(String prefix)
+  public CR(String prefix)
   {
     super(prefix);
     upstreamPeers = new ArrayList<>();
@@ -38,7 +39,7 @@ public class DisseminationFixed extends BaseDissemination
 
   public Object clone()
   {
-    DisseminationFixed d = (DisseminationFixed) super.clone();
+    CR d = (CR) super.clone();
     d.upstreamPeers = (ArrayList<Peer>) upstreamPeers.clone();
     d.downstreamPeers = (ArrayList<Peer>) downstreamPeers.clone();
     return d;
@@ -54,7 +55,7 @@ public class DisseminationFixed extends BaseDissemination
 
 
   @Override
-  protected void hookReceivedHeader(int blockId, long relativeTime, int hops)
+  protected void hookReceivedHeader(int blockId, long relativeTime, int hops, Address from)
   {
   }
 
@@ -122,5 +123,4 @@ public class DisseminationFixed extends BaseDissemination
   {
     return "Dissemination "+myNode().getID()+" ("+upstreamPeers.size()+" up, "+downstreamPeers.size()+" down)";
   }
-
 }

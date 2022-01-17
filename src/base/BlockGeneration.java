@@ -17,10 +17,15 @@ public class BlockGeneration implements Control
   int blockId = 0;
   int blocks;
 
+  // Skip every 'skip' blocks
+  int skip;
+  int count=0;
+
   public BlockGeneration(String prefix)
   {
     disseminationPid = Configuration.getPid(prefix + ".protocol");
     blocks = Configuration.getInt(prefix+"."+PAR_BLOCKS);
+    skip = Configuration.getInt(prefix + ".skip", -1);
   }
 
 
@@ -32,6 +37,10 @@ public class BlockGeneration implements Control
     if (blockId == blocks)
       return true;
 
+    // Skip one every 'skip' blocks.
+    if (skip > 0 && count++ % skip == 0)
+      return false;
+
     BaseDissemination d = null;
 
     do
@@ -39,7 +48,7 @@ public class BlockGeneration implements Control
       // Pick a random node as miner
       int r = CommonState.r.nextInt(Network.size());
 
-      System.out.print("Mining block at node "+r);
+      System.out.print("Mining block "+blockId+" at node "+r+" time "+CommonState.getTime());
 
       // Get that node's BaseDissemination protocol
       d = (BaseDissemination) Network.get(r).getProtocol(disseminationPid);
@@ -51,7 +60,7 @@ public class BlockGeneration implements Control
     // Generate a block on it
     d.generateBlock(blockId++);
 
-    System.err.print("\r#block "+blockId);
+    //System.err.print("\r#block "+blockId);
 
     return false;
   }
