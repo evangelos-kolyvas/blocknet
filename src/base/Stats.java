@@ -5,6 +5,7 @@
 package base;
 
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
@@ -31,8 +32,8 @@ public class Stats implements Control
   int disseminationPid;
   String filebase;
 
-  int round = 0;
   static int currentBlock = -1;
+  boolean firstTime = true;
 
 
 
@@ -43,9 +44,7 @@ public class Stats implements Control
     if (filebase.isEmpty())
       filebase = null;
 
-    //XXX deliveryTimes = new ArrayList[blocks];
     deliveryTimesArray = new ArrayList<ArrayList<Long>>();
-    //XXX deliveryHops = new HashMap[blocks];
     deliveryHopsArray = new ArrayList<HashMap<Integer,Integer>>();
   }
 
@@ -64,9 +63,7 @@ public class Stats implements Control
       deliveryHopsArray.add(currentDeliveryHops);
     }
 
-    //XXX deliveryTimes[blockId].add(time);
     currentDeliveryTimes.add(time);
-    //XXX int h = deliveryHops[blockId].getOrDefault(hops, Integer.valueOf(0));
     int h = currentDeliveryHops.getOrDefault(hops, Integer.valueOf(0));
     currentDeliveryHops.put(hops, h+1);
   }
@@ -80,12 +77,14 @@ public class Stats implements Control
     else
     {
       String filename;
-      if (round==0)
-        filename = filebase + "." + extension;
-      else
-        filename = filebase + "_" + String.format("%03d",round) + "." + extension;
+      filename = filebase + "." + extension;
 
-      PrintStream out = new PrintStream(filename);
+      PrintStream out;
+      if (firstTime)
+        out = new PrintStream(filename);  // create
+      else
+        out = new PrintStream(new FileOutputStream(filename, true));  // append
+
       return out;
     }
   }
@@ -159,7 +158,6 @@ public class Stats implements Control
     for (int i=0; i<Network.size(); i++)
       deliveryTimesSum.add(0L);
 
-    int count=0;
     for (ArrayList<Long> times: deliveryTimesArray)
     {
       for (int i=0; i<Network.size(); i++)
@@ -259,8 +257,6 @@ public class Stats implements Control
     if (CommonState.getTime() == 0)
       return false;
 
-    round++;
-
     //System.out.println("Starting to compute stats!");
     try
     {
@@ -277,6 +273,8 @@ public class Stats implements Control
     {
       e.printStackTrace();
     }
+
+    firstTime = false;
 
     return false;
   }

@@ -66,8 +66,6 @@ public class TransportDeltaQ extends Transport
   {
     int senderRouter = (int) src.getID()%RouterNetwork.getSize();
     int receiverRouter = dest.hashCode()%RouterNetwork.getSize();
-    if (senderRouter==676 && receiverRouter==914)
-      System.out.println("Here");
     Address senderAddress = new AddressSim(src);
 
 //    double l = RouterNetwork.getLatency(senderRouter, receiverRouter);
