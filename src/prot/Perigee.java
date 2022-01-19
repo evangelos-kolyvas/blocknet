@@ -5,7 +5,9 @@
 package prot;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import base.BaseDissemination;
@@ -32,6 +34,7 @@ public class Perigee extends BaseDissemination
 {
   private static final String PAR_OUTGOING = "outgoing";
   private static final String PAR_INCOMING = "incoming";
+  private static final String PAR_REPLACE = "weakest_links";
 
   ArrayList<Peer> outgoingSelections;    // Peers selected by me
   ArrayList<Peer> incomingSelections;    // Peers that selected me
@@ -42,6 +45,7 @@ public class Perigee extends BaseDissemination
 
   static private int numIncoming;
   static private int numOutgoing;
+  static private int weakestLinks;
   int prevId = -1;
   int currentBlockId = -1;
 
@@ -52,6 +56,9 @@ public class Perigee extends BaseDissemination
     incomingSelections = new ArrayList<>();
     numIncoming = Configuration.getInt(prefix + "." + PAR_INCOMING);
     numOutgoing = Configuration.getInt(prefix + "." + PAR_OUTGOING);
+    weakestLinks = Configuration.getInt(prefix + "." + PAR_REPLACE);
+
+    assert weakestLinks <= numOutgoing: PAR_REPLACE + " cannot be higher than "+PAR_OUTGOING;
   }
 
 
@@ -70,33 +77,42 @@ public class Perigee extends BaseDissemination
   public void calibrate()
   {
     // Remove weakest link, if scores are in place
-    if (scoring.size() > 0)
+    if (scoring.size() > 0 & weakestLinks > 0)
     {
-      int minScore = Integer.MAX_VALUE;
-      int minId = -1;
-      
+      // First, store the scores into an ArrayList, sort it, and find the k-th weakest one
+      List<Integer> scores = new ArrayList<Integer>(scoring.values());
+      Collections.sort(scores);
+      int minScore = scores.get(weakestLinks-1);
+
+      // Then, go through all <ID,score> tuples and store the IDs of the weakest links into 'minScoreIds'
+      ArrayList<Integer> minScoreIds = new ArrayList<>();
       for (Map.Entry<Integer,Integer> entry: scoring.entrySet())
       {
-        int id = entry.getKey();
         int score = entry.getValue();
-        if (score<minScore)
+        if (score<=minScore)
         {
-          minScore=score;
-          minId=id;
+          int id = entry.getKey();
+          minScoreIds.add(id);
+          if (minScoreIds.size() >= weakestLinks)
+            break;
         }
       }
-      Peer minPeer = id2peer(minId);
-      
-      // remove this peer from me
-      outgoingSelections.remove(minPeer);
-      removeDownstreamPeer(minPeer);
 
-      // remove me from other peer
-      Perigee minProt = (Perigee) peer2prot(minPeer);
-      minProt.incomingSelections.remove(myPeer());
-      minProt.removeDownstreamPeer(myPeer());
+      // FInally, properly remove the (bidirectional) links between me and each of the weakest peers
+      for (int id: minScoreIds)
+      {
+        // remove this peer from me
+        Peer weakPeer = id2peer(id);
+        outgoingSelections.remove(weakPeer);
+        removeDownstreamPeer(weakPeer);
 
-      // Reset scoring to assess the quality of the current outgoing peers
+        // remove me from other peer
+        Perigee weakProt = (Perigee) peer2prot(weakPeer);
+        weakProt.incomingSelections.remove(myPeer());
+        weakProt.removeDownstreamPeer(myPeer());
+      }
+
+      // Reset scoring to allow the future assessment of the updated set of outgoing peers
       scoring.clear();
     }
 
