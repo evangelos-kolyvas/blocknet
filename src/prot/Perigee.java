@@ -98,7 +98,7 @@ public abstract class Perigee extends BaseDissemination
         }
       }
 
-      // FInally, properly remove the (bidirectional) links between me and each of the weakest peers
+      // Finally, properly remove the (bidirectional) links between me and each of the weakest peers
       for (int id: minScoreIds)
       {
         // remove this peer from me
@@ -111,9 +111,6 @@ public abstract class Perigee extends BaseDissemination
         weakProt.incomingSelections.remove(myPeer());
         weakProt.removeDownstreamPeer(myPeer());
       }
-
-      // Reset scoring to allow the future assessment of the updated set of outgoing peers
-      scoring.clear();
     }
 
     // Fill in all missing links
@@ -144,6 +141,14 @@ public abstract class Perigee extends BaseDissemination
       newProt.incomingSelections.add(myPeer());
       newProt.addDownstreamPeer(myPeer());
     }
+
+    // Reset scoring to allow the future assessment of the updated set of outgoing peers
+    // It is important to explicitly set the initial score of all selected peers to 0,
+    // as some never receive any points, and they would not be replaced if not present
+    // in the scoring hashmap.
+    scoring.clear();
+    for (Peer p: outgoingSelections)
+      scoring.put((int) p.getID(), 0);
   }
 
 
