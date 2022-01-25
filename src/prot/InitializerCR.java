@@ -30,15 +30,23 @@ public class InitializerCR implements Control
   private static final String PAR_C = "c";
   private static final String PAR_R = "r";
   private static final String PAR_PROTOCOL = "protocol";
+  private static final String PAR_CDOWNSTREAM = "c_down";
+  private static final String PAR_RDOWNSTREAM = "r_down";
 
   int paramC;  // close peers
   int paramR;  // random peers
+  int paramCup;  // how many of the close peers should be upstream
+  int paramRup;  // how many of the random peers should be upstream
   int pid;
 
   public InitializerCR(String prefix)
   {
     paramC = Configuration.getInt(prefix+"."+PAR_C);
     paramR = Configuration.getInt(prefix+"."+PAR_R);
+    int paramCdown = Configuration.getInt(prefix+"."+PAR_CDOWNSTREAM, 0);  // defaults to 0
+    int paramRdown = Configuration.getInt(prefix+"."+PAR_RDOWNSTREAM, 0);  // defaults to 0
+    paramCup = paramC - paramCdown;
+    paramRup = paramR - paramRdown;
     pid = Configuration.getPid(prefix+"."+PAR_PROTOCOL);
   }
 
@@ -72,14 +80,25 @@ public class InitializerCR implements Control
       QuickSelect.quickSelect(distances, paramC+1);
 
       // Set the close peers
+      int upstreamCount = 0;
       for (int j=0; j<paramC+1; j++)
       {
         int closeNeighborID = QuickSelect.ids[j];
-        // System.out.println(RouterNetwork.getLatency(closeNeighborID % RouterNetwork.getSize(), i % RouterNetwork.getSize()));
         if (closeNeighborID == thisNode.getID())
           continue;
-        Peer peer = Network.get(closeNeighborID).getProtocol(pid).myPeer();
-        thisLinkable.addNeighbor(peer);
+
+        // Check whether this should be established as an upstream (default) or downstream link
+        if (upstreamCount < paramCup)  // upstream
+        {
+          Peer otherPeer = Network.get(closeNeighborID).getProtocol(pid).myPeer();
+          thisLinkable.addNeighbor(otherPeer);
+          upstreamCount++;
+        }
+        else // downstream
+        {
+          Linkable otherProt = (Linkable) Network.get(closeNeighborID).getProtocol(pid);
+          otherProt.addNeighbor(thisPeer);
+        }
       }
     }
   }
@@ -99,15 +118,30 @@ public class InitializerCR implements Control
       Peer thisPeer = thisNode.getProtocol(pid).myPeer();
 
       int j = 0;
+      int upstreamCount = 0;
       do
       {
         int r = CommonState.r.nextInt(Network.size());
+        Linkable otherProt = (Linkable) Network.get(r).getProtocol(pid);
         Peer peer = Network.get(r).getProtocol(pid).myPeer();
         if (peer.equals(thisPeer))
           continue;
-        if (thisLinkable.contains(peer))
-          continue;
-        thisLinkable.addNeighbor(peer);
+
+        // Check whether this should be established as an upstream (default) or downstream link
+        if (upstreamCount < paramRup)  // upstream
+        {
+          if (thisLinkable.contains(peer))
+            continue;
+          thisLinkable.addNeighbor(peer);
+          upstreamCount++;
+        }
+        else // downstream
+        {
+          if (otherProt.contains(thisPeer))
+            continue;
+          otherProt.addNeighbor(thisPeer);
+        }
+
         j++;
       } while (j<paramR);
     }
