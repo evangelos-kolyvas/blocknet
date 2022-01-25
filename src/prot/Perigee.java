@@ -30,7 +30,7 @@ import peernet.transport.AddressSim;
  * @author spyros
  *
  */
-public class Perigee extends BaseDissemination
+public abstract class Perigee extends BaseDissemination
 {
   private static final String PAR_OUTGOING = "outgoing";
   private static final String PAR_INCOMING = "incoming";
@@ -46,8 +46,8 @@ public class Perigee extends BaseDissemination
   static private int numIncoming;
   static private int numOutgoing;
   static private int weakestLinks;
-  int prevId = -1;
-  int currentBlockId = -1;
+
+
 
   public Perigee(String prefix)
   {
@@ -158,35 +158,6 @@ public class Perigee extends BaseDissemination
 
 
   @Override
-  protected void hookReceivedHeader(int blockId, long relativeTime, int hops, Address from)
-  {
-    // Check if we have a new block ID, and if so, reset prevId.
-    if (blockId != currentBlockId)
-    {
-      currentBlockId = blockId;
-      prevId = -1;
-    }
-
-    // Check if the sender is one of my selected (aka, outgoing) peers.
-    Peer upstreamPeer = addr2peer(from);
-    if (!outgoingSelections.contains(upstreamPeer))
-      return;
-
-    // If some other outgoing peer has previously delivered this block, increase its score.
-    if (prevId != -1)
-    {
-      int score = scoring.getOrDefault(prevId, 0);
-      scoring.put(prevId, score+1);
-    }
-
-    // And now put this node's ID into prevId, to prepare to get a score point
-    // if it's not the last one to deliver the header.
-    prevId = (int) upstreamPeer.getID();
-  }
-
-
-
-  @Override
   protected void hookReceivedBody(int blockId, long relativeTime, int hops)
   {
     Stats.reportDelivery(blockId, relativeTime, hops);
@@ -210,7 +181,7 @@ public class Perigee extends BaseDissemination
   }
 
 
-  private Peer id2peer(int id)
+  protected Peer id2peer(int id)
   {
     assert(Engine.getType() == Type.SIM);
     Node node = Network.get(id);
@@ -219,7 +190,7 @@ public class Perigee extends BaseDissemination
     return peer;
   }
   
-  private Peer addr2peer(Address addr)
+  protected Peer addr2peer(Address addr)
   {
     assert(Engine.getType() == Type.SIM);
     Node node = ((AddressSim) addr).node;
@@ -228,7 +199,12 @@ public class Perigee extends BaseDissemination
     return peer;
   }
 
-  private Protocol peer2prot(Peer peer)
+  protected long addr2id(Address addr)
+  {
+    Peer peer = addr2peer(addr);
+    return peer.getID();
+  }
+  protected Protocol peer2prot(Peer peer)
   {
     assert(Engine.getType() == Type.SIM);
     AddressSim addr = (AddressSim) peer.address;

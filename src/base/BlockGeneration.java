@@ -55,6 +55,7 @@ public class BlockGeneration implements Control
 
       // Make sure that node has at least two downstream peers
     } while (d.downstreamPeers.size() < 2);
+//    System.out.print("\r");
     System.out.println();
 
     // Generate a block on it
