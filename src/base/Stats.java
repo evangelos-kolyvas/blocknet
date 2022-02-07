@@ -35,6 +35,10 @@ public class Stats implements Control
   static int currentBlock = -1;
   boolean firstTime = true;
 
+  // Storing the maximum reported time and hops
+  static long maxTime = -1;
+  static long maxHops = -1;
+
 
 
   public Stats(String prefix)
@@ -66,6 +70,9 @@ public class Stats implements Control
     currentDeliveryTimes.add(time);
     int h = currentDeliveryHops.getOrDefault(hops, Integer.valueOf(0));
     currentDeliveryHops.put(hops, h+1);
+
+    maxTime = Math.max(time, maxTime);
+    maxHops = Math.max(hops, maxHops);
   }
 
 
@@ -113,10 +120,14 @@ public class Stats implements Control
 
 
   /**
-   * Averaging over all block delivery times
+   * Vertical averaging over all block delivery times.
+   * That is, for each point in time, the average number of
+   * uninformed nodes (across all block disseminations) is
+   * reported.
+   * 
    * @throws FileNotFoundException 
    */
-  private void printTimesAvgPerTime() throws FileNotFoundException
+  private void printVerticalAvg() throws FileNotFoundException
   {
     PrintStream out = getOutputStream("times.avg");
     out.println("#time\tnodes");
@@ -149,7 +160,56 @@ public class Stats implements Control
 
 
 
-  private void printTimesAvgPerPercentile() throws FileNotFoundException
+  /**
+   * Vertical averaging, reporting the average for every single millisecond,
+   * irrespectively of whether it has changed since the previous millisecond.
+   * 
+   * @throws FileNotFoundException 
+   */
+  private void printVerticalAvgExhaustive() throws FileNotFoundException
+  {
+    PrintStream out = getOutputStream("times.xavg");
+    out.println("#time\tnodes");
+  
+    int[] all = new int[(int)maxTime];
+  
+    int numBlocks = deliveryTimesArray.size();
+  
+    for (ArrayList<Long> times: deliveryTimesArray)
+    {
+      long t = 0;
+      int uninformedNodes = Network.size();
+  
+      for (long time: times)
+      {
+        while (t<time)
+          all[(int) t++] += uninformedNodes;
+        uninformedNodes--;
+      }
+    }
+  
+    int time = 0;
+    for (long uninformedNodes: all)
+    {
+      out.println(time + "\t" + uninformedNodes/(double)numBlocks);
+      time++;
+    }
+  
+    out.print("\n\n");
+    out.close();
+  }
+
+
+
+  /**
+   * Horizontal averaging over all block delivery times.
+   * That is, for each number of uninformed nodes, the average
+   * time when this was reached (across all block disseminations)
+   * is reported.
+   * 
+   * @throws FileNotFoundException 
+   */
+  private void printHorizontalAvg() throws FileNotFoundException
   {
     PrintStream out = getOutputStream("times.alt");
     out.println("#time\tnodes");
@@ -159,14 +219,16 @@ public class Stats implements Control
       deliveryTimesSum.add(0L);
 
     for (ArrayList<Long> times: deliveryTimesArray)
-    {
       for (int i=0; i<Network.size(); i++)
         deliveryTimesSum.set(i, deliveryTimesSum.get(i)+times.get(i));
-    }
 
     int numBlocks = deliveryTimesArray.size();
     for (int i=0; i<Network.size(); i++)
-      out.println(deliveryTimesSum.get(i)/(double)numBlocks + "\t"+(Network.size()-i));
+    {
+      double time = deliveryTimesSum.get(i) / (double)numBlocks;
+      double blocks = Network.size() - i - 1;
+      out.println(time + "\t" + blocks);
+    }
 
     out.print("\n\n");
     out.close();
@@ -221,34 +283,6 @@ public class Stats implements Control
     out.close();
   }
 
-  /**
-   * Averaging method followed by Vangelis
-   */
-//  private void altAvg()
-//  {
-//    int[] all = new int[2000];  // ugly
-//
-//    for (ArrayList<Long> times: deliveryTimes)
-//    {
-//      long t = 0;
-//      int uninformedNodes = Network.size();
-//
-//      for (long time: times)
-//      {
-//        while (t<time)
-//          all[(int) t++] += uninformedNodes;
-//        uninformedNodes--;
-//      }
-//    }
-//
-//    int time = 0;
-//    for (long uninformedNodes: all)
-//    {
-//      System.out.println(time+"\t"+uninformedNodes/(double)blocks);
-//      time++;
-//    }
-//  }
-
 
 
   @Override
@@ -260,14 +294,18 @@ public class Stats implements Control
     //System.out.println("Starting to compute stats!");
     try
     {
-      printTimesAvgPerTime();
-      //printTimesAvgPerPercentile();
-      //printAllTimes();
+      printVerticalAvg();
+      printVerticalAvgExhaustive();
+      printHorizontalAvg();
+
+      printAllTimes();
       //printAllHops();
 
       // Finally, reset all data, to prepare for next measurements
       deliveryTimesArray.clear();
       deliveryHopsArray.clear();
+      maxTime = -1;
+      maxHops = -1;
     }
     catch (IOException e)
     {
