@@ -19,7 +19,8 @@ import peernet.core.Network;
 
 public class Stats implements Control
 {
-  //static ArrayList<Long>[] deliveryTimes;
+  // Each block's miner ID
+  static ArrayList<Integer> miners;
 
   // One ArrayList<Long> per block
   static ArrayList<ArrayList<Long>> deliveryTimesArray;
@@ -48,8 +49,16 @@ public class Stats implements Control
     if (filebase.isEmpty())
       filebase = null;
 
+    miners = new ArrayList<Integer>();
     deliveryTimesArray = new ArrayList<ArrayList<Long>>();
     deliveryHopsArray = new ArrayList<HashMap<Integer,Integer>>();
+  }
+
+
+
+  public static void reportMiner(int blockId, int minerId)
+  {
+    miners.add(minerId);
   }
 
 
@@ -77,7 +86,7 @@ public class Stats implements Control
 
 
 
-  private PrintStream getOutputStream(String extension) throws FileNotFoundException
+  private PrintStream getOutputStream(String extension, boolean append) throws FileNotFoundException
   {
     if (filebase==null)
       return System.out;
@@ -87,7 +96,7 @@ public class Stats implements Control
       filename = filebase + "." + extension;
 
       PrintStream out;
-      if (firstTime)
+      if (firstTime || !append)
         out = new PrintStream(filename);  // create
       else
         out = new PrintStream(new FileOutputStream(filename, true));  // append
@@ -104,7 +113,7 @@ public class Stats implements Control
    */
   private void printAllTimes() throws FileNotFoundException
   {
-    PrintStream out = getOutputStream("times");
+    PrintStream out = getOutputStream("times", true);
     out.println("#time\tnodes");
 
     for (ArrayList<Long> times: deliveryTimesArray)
@@ -112,6 +121,48 @@ public class Stats implements Control
       int uninformedNodes = Network.size();
       for (long time: times)
         out.println(time+"\t"+(--uninformedNodes));
+      out.print("\n\n");
+    }
+    out.close();
+  }
+
+
+
+  private int getLastBlockOfMiner(int miner)
+  {
+    for (int i=miners.size()-1; i>=0; i--)
+    {
+      if (miners.get(i) == miner)
+        return i;
+    }
+    return -1;
+  }
+
+
+
+  /**
+   * Prints delivery times for the last block produced by each miner
+   * @throws IOException 
+   */
+  private void printAllTimesPerMiner() throws FileNotFoundException
+  {
+    PrintStream out = getOutputStream("times.miners", false);
+    out.println("#time\tnodes\tminer");
+
+    for (int miner=0; miner<Network.size(); miner++)
+    {
+      int blockId = getLastBlockOfMiner(miner);
+
+      if (blockId == -1)
+        out.println(0 + "\t" + 0 + "\t" + miner);
+      else
+      {
+        ArrayList<Long> times = deliveryTimesArray.get(blockId);
+        int uninformedNodes = Network.size();
+        for (long time: times)
+          out.println(time+"\t"+(--uninformedNodes)+"\t"+miner);
+      }
+
       out.print("\n\n");
     }
     out.close();
@@ -129,7 +180,7 @@ public class Stats implements Control
    */
   private void printVerticalAvg() throws FileNotFoundException
   {
-    PrintStream out = getOutputStream("times.avg");
+    PrintStream out = getOutputStream("times.avg", true);
     out.println("#time\tnodes");
 
     int numBlocks = deliveryTimesArray.size();
@@ -168,7 +219,7 @@ public class Stats implements Control
    */
   private void printVerticalAvgExhaustive() throws FileNotFoundException
   {
-    PrintStream out = getOutputStream("times.xavg");
+    PrintStream out = getOutputStream("times.xavg", true);
     out.println("#time\tnodes");
   
     int[] all = new int[(int)maxTime];
@@ -211,7 +262,7 @@ public class Stats implements Control
    */
   private void printHorizontalAvg() throws FileNotFoundException
   {
-    PrintStream out = getOutputStream("times.alt");
+    PrintStream out = getOutputStream("times.alt", true);
     out.println("#time\tnodes");
 
     ArrayList<Long> deliveryTimesSum = new ArrayList<>(Network.size());
@@ -238,7 +289,7 @@ public class Stats implements Control
 
   private void printAllHops() throws FileNotFoundException
   {
-    PrintStream out = getOutputStream("hops");
+    PrintStream out = getOutputStream("hops", true);
     out.println("#hops\tcount");
 
     HashMap<Integer,Integer> avg = new HashMap<>();
@@ -265,7 +316,7 @@ public class Stats implements Control
     out.close();
 
     // Now output the average values
-    out = getOutputStream("hops.avg");
+    out = getOutputStream("hops.avg", true);
     out.println("#hops\tcount%");
     int hops = 0;
     int count;
@@ -295,13 +346,15 @@ public class Stats implements Control
     try
     {
       printVerticalAvg();
-      printVerticalAvgExhaustive();
-      printHorizontalAvg();
+      //printVerticalAvgExhaustive();
+      //printHorizontalAvg();
 
-      printAllTimes();
+      //printAllTimes();
+      printAllTimesPerMiner();
       //printAllHops();
 
       // Finally, reset all data, to prepare for next measurements
+      miners.clear();
       deliveryTimesArray.clear();
       deliveryHopsArray.clear();
       maxTime = -1;

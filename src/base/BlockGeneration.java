@@ -43,10 +43,11 @@ public class BlockGeneration implements Control
 
     BaseDissemination d = null;
 
+    int r;
     do
     {
       // Pick a random node as miner
-      int r = CommonState.r.nextInt(Network.size());
+      r = CommonState.r.nextInt(Network.size());
 
       System.out.print("Mining block "+blockId+" at node "+r+" time "+CommonState.getTime());
 
@@ -57,6 +58,8 @@ public class BlockGeneration implements Control
     } while (d.downstreamPeers.size() < 2);
 //    System.out.print("\r");
     System.out.println();
+
+    Stats.reportMiner(blockId, r);
 
     // Generate a block on it
     d.generateBlock(blockId++);
