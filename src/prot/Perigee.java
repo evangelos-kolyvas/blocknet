@@ -39,21 +39,24 @@ public abstract class Perigee extends BaseDissemination
   ArrayList<Peer> outgoingSelections;    // Peers selected by me
   ArrayList<Peer> incomingSelections;    // Peers that selected me
 
-  ArrayList<Integer> deliveryTimes;
+  static protected int numIncoming;
+  static protected int numOutgoing;
+  static protected int weakestLinks;
 
-  HashMap<Integer, Integer> scoring = new HashMap<Integer, Integer>();
-
-  static private int numIncoming;
-  static private int numOutgoing;
-  static private int weakestLinks;
+  protected HashMap<Address, Integer> peerMapping;
 
 
 
   public Perigee(String prefix)
   {
     super(prefix);
+
+    // Instance fields
     outgoingSelections = new ArrayList<>();
     incomingSelections = new ArrayList<>();
+    peerMapping = new HashMap<>();
+
+    // Static fields
     numIncoming = Configuration.getInt(prefix + "." + PAR_INCOMING);
     numOutgoing = Configuration.getInt(prefix + "." + PAR_OUTGOING);
     weakestLinks = Configuration.getInt(prefix + "." + PAR_REPLACE);
@@ -68,87 +71,8 @@ public abstract class Perigee extends BaseDissemination
     Perigee d = (Perigee) super.clone();
     d.outgoingSelections = (ArrayList<Peer>) outgoingSelections.clone();
     d.incomingSelections = (ArrayList<Peer>) incomingSelections.clone();
-    d.scoring = (HashMap<Integer, Integer>) scoring.clone();
+    d.peerMapping = (HashMap<Address, Integer>) peerMapping.clone();
     return d;
-  }
-
-
-
-  public void calibrate()
-  {
-    // Remove weakest link, if scores are in place
-    if (scoring.size() > 0 & weakestLinks > 0)
-    {
-      // First, store the scores into an ArrayList, sort it, and find the k-th weakest one
-      List<Integer> scores = new ArrayList<Integer>(scoring.values());
-      Collections.sort(scores);
-      int minScore = scores.get(weakestLinks-1);
-
-      // Then, go through all <ID,score> tuples and store the IDs of the weakest links into 'minScoreIds'
-      ArrayList<Integer> minScoreIds = new ArrayList<>();
-      for (Map.Entry<Integer,Integer> entry: scoring.entrySet())
-      {
-        int score = entry.getValue();
-        if (score<=minScore)
-        {
-          int id = entry.getKey();
-          minScoreIds.add(id);
-          if (minScoreIds.size() >= weakestLinks)
-            break;
-        }
-      }
-
-      // Finally, properly remove the (bidirectional) links between me and each of the weakest peers
-      for (int id: minScoreIds)
-      {
-        // remove this peer from me
-        Peer weakPeer = id2peer(id);
-        outgoingSelections.remove(weakPeer);
-        removeDownstreamPeer(weakPeer);
-
-        // remove me from other peer
-        Perigee weakProt = (Perigee) peer2prot(weakPeer);
-        weakProt.incomingSelections.remove(myPeer());
-        weakProt.removeDownstreamPeer(myPeer());
-      }
-    }
-
-    // Fill in all missing links
-    while (outgoingSelections.size() < numOutgoing)
-    {
-      // pick random neighbor
-      int i = CommonState.r.nextInt(Network.size());
-      Peer newPeer = id2peer(i);
-   
-      // check if I randomly picked myself, and skip me! :-)
-      if (newPeer.equals(myPeer()))
-        continue;
-
-      // check if I already have this peer (either as outgoing or incoming)
-      if (contains(newPeer))
-        continue;
-
-      // else, check if the other peer has available incoming slots
-      Perigee newProt = (Perigee) peer2prot(newPeer);
-      if (newProt.incomingSelections.size() >= numIncoming)
-        continue;
-
-      // if all is ok, add that node to me
-      outgoingSelections.add(newPeer);
-      addDownstreamPeer(newPeer);
-
-      // and add myself to that node!
-      newProt.incomingSelections.add(myPeer());
-      newProt.addDownstreamPeer(myPeer());
-    }
-
-    // Reset scoring to allow the future assessment of the updated set of outgoing peers
-    // It is important to explicitly set the initial score of all selected peers to 0,
-    // as some never receive any points, and they would not be replaced if not present
-    // in the scoring hashmap.
-    scoring.clear();
-    for (Peer p: outgoingSelections)
-      scoring.put((int) p.getID(), 0);
   }
 
 
@@ -160,6 +84,9 @@ public abstract class Perigee extends BaseDissemination
     calibrate();
   }
 
+
+
+  protected abstract void calibrate();
 
 
   @Override
@@ -194,7 +121,24 @@ public abstract class Perigee extends BaseDissemination
     Peer peer = prot.myPeer();
     return peer;
   }
-  
+
+
+
+  /**
+   * Given an address, it returns the index of that peer in 'outgoingSelections',
+   * if there, or null, if not there.
+   * 
+   * @param addr
+   * @return
+   */
+  protected int addr2index(Address addr)
+  {
+    Integer index = peerMapping.get(addr);
+    return index==null ? -1 : index;
+  }
+
+
+
   protected Peer addr2peer(Address addr)
   {
     assert(Engine.getType() == Type.SIM);
@@ -204,11 +148,8 @@ public abstract class Perigee extends BaseDissemination
     return peer;
   }
 
-  protected long addr2id(Address addr)
-  {
-    Peer peer = addr2peer(addr);
-    return peer.getID();
-  }
+
+
   protected Protocol peer2prot(Peer peer)
   {
     assert(Engine.getType() == Type.SIM);
@@ -217,7 +158,8 @@ public abstract class Perigee extends BaseDissemination
     Protocol prot = node.getProtocol(pid);
     return prot;
   }
-  
+
+
 
   @Override
   public boolean addNeighbor(Peer neighbor)
@@ -264,5 +206,4 @@ public abstract class Perigee extends BaseDissemination
   {
     return "Dissemination "+myNode().getID()+" ("+outgoingSelections.size()+" out, "+incomingSelections.size()+" in)";
   }
-
 }

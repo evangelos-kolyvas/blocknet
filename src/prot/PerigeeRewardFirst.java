@@ -10,7 +10,7 @@ import peernet.transport.Address;
 
 
 /**
- * This class extends the {@link Perigee} abstract class, implementing the
+ * This class extends the {@link PerigeeSingle} abstract class, implementing the
  * scoring function that rewards the first selected neighbor to deliver a
  * header by DT, where DT is the number of milliseconds after which another
  * selected neighbor delivers the same header too.
@@ -22,7 +22,7 @@ import peernet.transport.Address;
  * @author spyros
  *
  */
-public class PerigeeRewardFirst extends Perigee
+public class PerigeeRewardFirst extends PerigeeSingle
 {
   public PerigeeRewardFirst(String prefix)
   {

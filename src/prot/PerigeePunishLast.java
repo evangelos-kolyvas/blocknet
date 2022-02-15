@@ -8,7 +8,7 @@ import peernet.core.Peer;
 import peernet.transport.Address;
 
 /**
- * This class extends the {@link Perigee} abstract class, implementing the
+ * This class extends the {@link PerigeeSingle} abstract class, implementing the
  * scoring function that rewards all but the last selected neighbor to deliver
  * a given header by one score point.
  * 
@@ -20,7 +20,7 @@ import peernet.transport.Address;
  * @author spyros
  *
  */
-public class PerigeePunishLast extends Perigee
+public class PerigeePunishLast extends PerigeeSingle
 {
   private int prevId = -1;
   private int currentBlockId = -1;
