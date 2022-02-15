@@ -9,18 +9,9 @@ import peernet.core.CommonState;
 
 public class QuickSelect
 {
-  public static int[] ids = null;
+  public static int[] ids = new int[0];
   private static int[] scores;
   
-  static
-  {
-    int netsize = Configuration.getInt("NODES");
-
-    ids = new int[netsize];
-    for (int i=0; i<ids.length; i++)
-      ids[i] = i;
-  }
-
 
 
   public static void testQS(int size, int topK)
@@ -38,6 +29,16 @@ public class QuickSelect
     }
 
     quickSelect(scores, topK);
+  }
+
+
+
+  static void reset(int size)
+  {
+    //System.err.println("QS resetting to "+size);
+    ids = new int[size];
+    for (int i=0; i<size; i++)
+      ids[i] = i;
   }
 
 
@@ -75,6 +76,9 @@ public class QuickSelect
 
   public static void quickSelect(int[] _scores, int topK)
   {
+    if (_scores.length != ids.length)
+      reset(_scores.length);
+
     scores = _scores;
     int j;
     int left = 0;
