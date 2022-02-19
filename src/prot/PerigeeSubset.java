@@ -116,22 +116,23 @@ public class PerigeeSubset extends Perigee
       for (int i=0; i<numSubsets; i++)
         subsetScores[i] = getSubsetScore(i);
 
-      // Find the subset with the worst score (max number)
-      int maxScore = -1;
-      int weakestSubset=-1;
+      // Find the subset with the best score (min number)
+      int bestScore = LOWEST_SCORE;
+      int strongestSubset=-1;
       for (int i=0; i<numSubsets; i++)
       {
-        if (subsetScores[i] > maxScore)
+        if (subsetScores[i] < bestScore)
         {
-          weakestSubset = i;
-          maxScore = subsetScores[i];
+          strongestSubset = i;
+          bestScore = subsetScores[i];
         }
       }
 
-      // Finally, properly remove the (bidirectional) links between me and each of the weakest peers
+      // Finally, properly remove the (bidirectional) links between me and each of
+      // the weakest peers (i.e., the peers NOT belonging to the strongest subset)
       for (int index=numOutgoing-1; index>=0; index--)
       {
-        if (nodesInSubset.get(weakestSubset).get(index))
+        if (nodesInSubset.get(strongestSubset).get(index))
           continue;
 
         // remove my i-th outgoing neighbor
@@ -193,11 +194,13 @@ public class PerigeeSubset extends Perigee
   protected void hookReceivedHeader(int blockId, long relativeTime, int hops, Address from)
   {
     // Check if the sender is one of my selected (aka, outgoing) peers.
-    int upstreamPeer = addr2index(from);
-    if (upstreamPeer==-1)
+    int upstreamPeerIndex = addr2index(from);
+    if (upstreamPeerIndex==-1)
       return;
 
-    // Check if we have a new block ID, and if so, reset prevId.
+    // Check if we have a new block ID.
+    // If so, save the current timestamp on 'firstDelivery'
+    // and append a new array of scores in 'allScores'.
     if (blockId != currentBlockId)
     {
       currentBlockId = blockId;
@@ -222,9 +225,9 @@ public class PerigeeSubset extends Perigee
 
     // Go through all subsets of the upstream peer.
     // and assign this score to those that have not received a score yet.
-    for (int subset: subsetsOfNode.get(upstreamPeer))
+    for (int subset: subsetsOfNode.get(upstreamPeerIndex))
     {
-      if (currentScores[subset] == LOWEST_SCORE)
+      if (currentScores[subset] == LOWEST_SCORE) // subset not previously scored
       {
         currentScores[subset] = score;
         completedSubsets++;
