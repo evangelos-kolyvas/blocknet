@@ -19,20 +19,20 @@ import peernet.transport.Address;
 
 public abstract class BaseDissemination extends Protocol implements Linkable
 {
-  private static final String PAR_HEADER_PROCESSING = "header_validation_time";
-  private static final String PAR_BODY_PROCESSING = "body_validation_time";
-  private static final String PAR_EXTRA_ROUND_TRIPS = "extra_tcp_trips";
+  static private final String PAR_HEADER_PROCESSING = "header_validation_time";
+  static private final String PAR_BODY_PROCESSING = "body_validation_time";
+  static private final String PAR_EXTRA_ROUND_TRIPS = "extra_tcp_trips";
+  static private final String PAR_HEADER_ONLY = "header_only";
 
-  //static int cycle;
-  public static int pid;
+  static protected int pid;
 
-  static int header_validation_time;
-  static int body_validation_time;
+  static private int header_validation_time;
+  static private int body_validation_time;
+  static private boolean headerOnly;
 
   HashSet<Integer> receivedHeaders;
   HashSet<Integer> receivedBodies;
 
-//  ArrayList<Peer> upstreamPeers;
   ArrayList<Peer> downstreamPeers;
 
   /**
@@ -96,9 +96,9 @@ public abstract class BaseDissemination extends Protocol implements Linkable
   {
     super(prefix);
 
-//    cycle = Configuration.getInt("CYCLE");
     header_validation_time = Configuration.getInt(prefix+"."+PAR_HEADER_PROCESSING);
     body_validation_time = Configuration.getInt(prefix+"."+PAR_BODY_PROCESSING);
+    headerOnly = Configuration.getBoolean(prefix+"."+PAR_HEADER_ONLY, false);
 
     int extra_round_trips = Configuration.getInt(prefix+"."+PAR_EXTRA_ROUND_TRIPS);
     TransportDeltaQ.setBodyExtraRoundTrips(extra_round_trips);
@@ -112,7 +112,6 @@ public abstract class BaseDissemination extends Protocol implements Linkable
   {
     BaseDissemination d = (BaseDissemination) super.clone();
 
-//    d.upstreamPeers = new ArrayList<>();
     d.downstreamPeers = new ArrayList<>();
 
     d.receivedHeaders = new HashSet<>();
@@ -120,14 +119,6 @@ public abstract class BaseDissemination extends Protocol implements Linkable
 
     return d;
   }
-
-
-
-//  @Override
-//  public void nextCycle(int schedId)
-//  {
-//    // TODO Auto-generated method stub
-//  }
 
 
 
@@ -176,12 +167,21 @@ public abstract class BaseDissemination extends Protocol implements Linkable
         {
           receivedHeaders.add(msg.blockId);  // Mark that I received this header
 
-          // Respond to my upstream peer requesting the body
           Message m = (Message) msg.clone();
-          m.type = MSGType.DN__SEND_BODY_REQUEST;
-          m.replyTo = src;
-
-          schedule(header_validation_time, m);
+          if (headerOnly)
+          {
+            // Assume that the body came along with the header, so proceed to forwarding it further on
+            m.type = MSGType.DN__FORWARD_NEXT_HOP;
+            m.replyTo = src;
+            schedule(header_validation_time + body_validation_time, m);
+          }
+          else
+          {
+            // Respond to my upstream peer requesting the body
+            m.type = MSGType.DN__SEND_BODY_REQUEST;
+            m.replyTo = src;
+            schedule(header_validation_time, m);
+          }
         }
         break;
 
