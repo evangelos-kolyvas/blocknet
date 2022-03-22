@@ -350,7 +350,7 @@ public class Stats implements Control
       //printHorizontalAvg();
 
       //printAllTimes();
-      printAllTimesPerMiner();
+      //printAllTimesPerMiner();
       //printAllHops();
 
       // Finally, reset all data, to prepare for next measurements

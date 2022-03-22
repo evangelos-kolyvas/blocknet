@@ -22,17 +22,17 @@ import peernet.transport.Address;
 public class CR extends BaseDissemination
 {
   ArrayList<Peer> upstreamPeers;
-  ArrayList<Peer> downstreamPeers;
+  //ArrayList<Peer> downstreamPeers;
 
 
-  ArrayList<Integer> deliveryTimes;
+  //ArrayList<Integer> deliveryTimes;
 
 
   public CR(String prefix)
   {
     super(prefix);
     upstreamPeers = new ArrayList<>();
-    downstreamPeers = new ArrayList<>();
+    //downstreamPeers = new ArrayList<>();
   }
 
 
@@ -41,7 +41,7 @@ public class CR extends BaseDissemination
   {
     CR d = (CR) super.clone();
     d.upstreamPeers = (ArrayList<Peer>) upstreamPeers.clone();
-    d.downstreamPeers = (ArrayList<Peer>) downstreamPeers.clone();
+    //d.downstreamPeers = (ArrayList<Peer>) downstreamPeers.clone();
     return d;
   }
 
