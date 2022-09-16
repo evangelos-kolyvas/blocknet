@@ -121,7 +121,6 @@ public class InitializerCR implements Control
     // Go through each and every node
     for (int i=0; i<Network.size(); i++)
     {
-      System.out.println("node "+i);
       // Find this node's closest peers
       Node thisNode = Network.get(i);
       Linkable thisLinkable = (Linkable) thisNode.getProtocol(pid);
@@ -239,7 +238,7 @@ public class InitializerCR implements Control
         Linkable otherLinkable = (Linkable) otherNode.getProtocol(pid);
 
         if (setBidirectionalLink(thisLinkable, thisPeer, otherLinkable, otherPeer))
-          if (++count == paramC)
+          if (++count == paramR)
             break;
       }
     }
