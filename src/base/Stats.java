@@ -24,23 +24,25 @@ public class Stats implements Control
 
   // One ArrayList<Long> per block
   static ArrayList<ArrayList<Long>> deliveryTimesArray;
-  static ArrayList<Long> currentDeliveryTimes;
 
   // One HashMap per block
   static ArrayList<HashMap<Integer, Integer>> deliveryHopsArray;
-  static HashMap<Integer, Integer> currentDeliveryHops;
 
-  int disseminationPid;
+  static int disseminationPid;
   String filebase;
 
-  static int currentBlock = -1;
   boolean firstTime = true;
 
   // Storing the maximum reported time and hops
   static long maxTime = -1;
   static long maxHops = -1;
 
+  // The highest block ID number seen so far (to deal with data array sizes)
+  static int highestReportedBlockId = -1;
 
+  static int chainTip = -1;
+  static int blocksOnChain = 0;
+  static int blocksOffChain = 0;
 
   public Stats(String prefix)
   {
@@ -59,26 +61,41 @@ public class Stats implements Control
   public static void reportMiner(int blockId, int minerId)
   {
     miners.add(minerId);
+
+    // Check whether the miner is already in possession of the chain tip
+    BaseDissemination miner = (BaseDissemination) Network.get(minerId).getProtocol(disseminationPid);
+    if (blockId==0 || miner.validatedBodies.contains(chainTip))
+    {
+      // Update the chain tip to the current block
+      chainTip = blockId;
+      blocksOnChain++;
+      // System.out.println("#ON: "+blockId);
+    }
+    else
+    {
+      // The chain tip remains the same
+      blocksOffChain++;
+      // System.out.println("#OFF: "+blockId);
+    }
   }
 
 
 
   public static void reportDelivery(int blockId, long time, int hops)
   {
-    if (blockId != currentBlock)
+    if (blockId > highestReportedBlockId)
     {
-      currentBlock = blockId;
-
-      currentDeliveryTimes = new ArrayList<>();
-      deliveryTimesArray.add(currentDeliveryTimes);
-
-      currentDeliveryHops = new HashMap<Integer,Integer>();
-      deliveryHopsArray.add(currentDeliveryHops);
+      while (highestReportedBlockId < blockId)
+      {
+        deliveryTimesArray.add(new ArrayList<>());
+        deliveryHopsArray.add(new HashMap<Integer, Integer>());
+        highestReportedBlockId++;
+      }
     }
 
-    currentDeliveryTimes.add(time);
-    int h = currentDeliveryHops.getOrDefault(hops, Integer.valueOf(0));
-    currentDeliveryHops.put(hops, h+1);
+    deliveryTimesArray.get(blockId).add(time);
+    int h = deliveryHopsArray.get(blockId).getOrDefault(hops, Integer.valueOf(0));
+    deliveryHopsArray.get(blockId).put(hops, h+1);
 
     maxTime = Math.max(time, maxTime);
     maxHops = Math.max(hops, maxHops);
@@ -287,6 +304,22 @@ public class Stats implements Control
 
 
 
+  /**
+   * 
+   * @throws FileNotFoundException 
+   */
+  private void printThroughput() throws FileNotFoundException
+  {
+    int cycle = Configuration.getInt("control.mining.step");
+
+    PrintStream out = getOutputStream("thru", true);
+    out.println("#cycle\ton\toff");
+    out.println(cycle + "\t" + blocksOnChain + "\t" + blocksOffChain);
+    out.close();
+  }
+
+
+
   private void printAllHops() throws FileNotFoundException
   {
     PrintStream out = getOutputStream("hops", true);
@@ -350,8 +383,9 @@ public class Stats implements Control
       //printHorizontalAvg();
 
       //printAllTimes();
-      printAllTimesPerMiner();
+      //printAllTimesPerMiner();
       //printAllHops();
+      //printThroughput();
 
       // Finally, reset all data, to prepare for next measurements
       miners.clear();

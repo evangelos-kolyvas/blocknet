@@ -5,6 +5,7 @@
 package base;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 
 import peernet.config.Configuration;
@@ -23,17 +24,21 @@ public abstract class BaseDissemination extends Protocol implements Linkable
   static private final String PAR_BODY_PROCESSING = "body_validation_time";
   static private final String PAR_EXTRA_ROUND_TRIPS = "extra_tcp_trips";
   static private final String PAR_HEADER_ONLY = "header_only";
+  static private final String PAR_BODY_REQUESTS = "body_requests";
 
   static protected int pid;
 
   static private int header_validation_time;
   static private int body_validation_time;
   static private boolean headerOnly;
+  static private int bodyRequests = 0; // From how many upstream peers to pull a body.
 
   HashSet<Integer> receivedHeaders;
   HashSet<Integer> receivedBodies;
+  HashSet<Integer> validatedBodies;
+  HashMap<Integer,Integer> bodiesRequested; // The number of upstream peers from which I have requested this body
 
-  ArrayList<Peer> downstreamPeers;
+  protected ArrayList<Peer> downstreamPeers;
 
   /**
    * These are the message types for dissemination. The message name indicates
@@ -99,6 +104,7 @@ public abstract class BaseDissemination extends Protocol implements Linkable
     header_validation_time = Configuration.getInt(prefix+"."+PAR_HEADER_PROCESSING);
     body_validation_time = Configuration.getInt(prefix+"."+PAR_BODY_PROCESSING);
     headerOnly = Configuration.getBoolean(prefix+"."+PAR_HEADER_ONLY, false);
+    bodyRequests = Configuration.getInt(prefix+"."+PAR_BODY_REQUESTS);
 
     int extra_round_trips = Configuration.getInt(prefix+"."+PAR_EXTRA_ROUND_TRIPS);
     TransportDeltaQ.setBodyExtraRoundTrips(extra_round_trips);
@@ -116,6 +122,8 @@ public abstract class BaseDissemination extends Protocol implements Linkable
 
     d.receivedHeaders = new HashSet<>();
     d.receivedBodies = new HashSet<>();
+    d.validatedBodies = new HashSet<>();
+    d.bodiesRequested = new HashMap<>();
 
     return d;
   }
@@ -139,6 +147,7 @@ public abstract class BaseDissemination extends Protocol implements Linkable
         // Pretend I just "received" header and body
         receivedHeaders.add(msg.blockId);  // Mark that I have received this header
         receivedBodies.add(msg.blockId);  // Mark that I have received this body
+        validatedBodies.add(msg.blockId);  // Mark that I have validated this body
 
         // Stats
         hookReceivedBody(msg.blockId, CommonState.getTime()-msg.time, msg.hops);
@@ -163,7 +172,8 @@ public abstract class BaseDissemination extends Protocol implements Linkable
       case DN__RECEIVE_AND_PROCESS_HEADER:
         hookReceivedHeader(msg.blockId, CommonState.getTime()-msg.time, msg.hops, src);
 
-        if (!receivedHeaders.contains(msg.blockId))
+        if (shouldRequestBody(msg.blockId))
+        //if (!receivedHeaders.contains(msg.blockId))
         {
           receivedHeaders.add(msg.blockId);  // Mark that I received this header
 
@@ -223,7 +233,7 @@ public abstract class BaseDissemination extends Protocol implements Linkable
        */
       case DN__RECEIVE_AND_PROCESS_BODY:
       {
-        assert !receivedBodies.contains(msg.blockId): "I shouldn't have received this block body for a second time!";
+        //assert !receivedBodies.contains(msg.blockId): "I shouldn't have received this block body for a second time!";
 
         receivedBodies.add(msg.blockId);  // Mark that I have received this body
 
@@ -245,19 +255,24 @@ public abstract class BaseDissemination extends Protocol implements Linkable
 //        Stats.reportDelivery(msg.blockId, timeSinceBlockGeneration, msg.hops);
 //        System.out.println(timeSinceBlockGeneration+"\t"+msg.replyTo+" -> "+myNode().getID());
 
+
         // Stats
-        hookReceivedBody(msg.blockId, CommonState.getTime()-msg.time, msg.hops);
-
-        Message m = (Message) msg.clone();
-        m.type = MSGType.DN__RECEIVE_AND_PROCESS_HEADER;
-        m.hops++;  // forwarding downstream to the next hop!
-
-        TransportDeltaQ.setBody(false);  // Going to send header (==> SMALL)
-        for (Peer peer: downstreamPeers)
+        if (!validatedBodies.contains(msg.blockId))
         {
-          if (peer.address.equals(msg.replyTo))  // do not send block back to the node that gave it to me!
-            continue;
-          send(peer.address, myPid(), m);
+          hookReceivedBody(msg.blockId, CommonState.getTime()-msg.time, msg.hops);
+          validatedBodies.add(msg.blockId);  // Mark that I have validated this body
+
+          Message m = (Message) msg.clone();
+          m.type = MSGType.DN__RECEIVE_AND_PROCESS_HEADER;
+          m.hops++;  // forwarding downstream to the next hop!
+
+          TransportDeltaQ.setBody(false);  // Going to send header (==> SMALL)
+          for (Peer peer: downstreamPeers)
+          {
+            if (peer.address.equals(msg.replyTo))  // do not send block back to the node that gave it to me!
+              continue;
+            send(peer.address, myPid(), m);
+          }
         }
 
         break;
@@ -280,6 +295,25 @@ public abstract class BaseDissemination extends Protocol implements Linkable
     msg.time = CommonState.getTime();
 
     processEvent(null,  msg);
+  }
+
+
+
+  protected boolean shouldRequestBody(int blockId)
+  {
+    // First check whether I have already received this block's body.
+    if (validatedBodies.contains(blockId))  // If yes, do not request again.
+      return false;
+
+    // Then, check how many times (if any) I have requested the body.
+    int numRequested = bodiesRequested.getOrDefault(blockId, 0);
+    if (numRequested < bodyRequests)
+    {
+      bodiesRequested.put(blockId, numRequested+1);
+      return true;
+    }
+    else
+      return false;
   }
 
 

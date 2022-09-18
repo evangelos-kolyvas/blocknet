@@ -32,12 +32,14 @@ public class InitializerCR implements Control
   private static final String PAR_PROTOCOL = "protocol";
   private static final String PAR_CDOWNSTREAM = "c_down";
   private static final String PAR_RDOWNSTREAM = "r_down";
+  private static final String PAR_BIDIRECTIONAL = "undir";
 
   int paramC;  // close peers
   int paramR;  // random peers
   int paramCup;  // how many of the close peers should be upstream
   int paramRup;  // how many of the random peers should be upstream
   int pid;
+  boolean bidirectional;
 
   public InitializerCR(String prefix)
   {
@@ -45,6 +47,7 @@ public class InitializerCR implements Control
     paramR = Configuration.getInt(prefix+"."+PAR_R);
     int paramCdown = Configuration.getInt(prefix+"."+PAR_CDOWNSTREAM, 0);  // defaults to 0
     int paramRdown = Configuration.getInt(prefix+"."+PAR_RDOWNSTREAM, 0);  // defaults to 0
+    bidirectional = Configuration.getBoolean(prefix+"."+PAR_BIDIRECTIONAL);
     paramCup = paramC - paramCdown;
     paramRup = paramR - paramRdown;
     pid = Configuration.getPid(prefix+"."+PAR_PROTOCOL);
@@ -66,18 +69,21 @@ public class InitializerCR implements Control
 
     int[] distances = new int[Network.size()];
 
+    // Go through each and every node
     for (int i=0; i<Network.size(); i++)
     {
+      // Find this node's closest peers
       Node thisNode = Network.get(i);
       Linkable thisLinkable = (Linkable) thisNode.getProtocol(pid);
       Peer thisPeer = thisNode.getProtocol(pid).myPeer();
 
+      // Compute RTT distances to all other nodes
       for (int j=0; j<Network.size(); j++)
         distances[j] = latency(j,i) + latency(i,j);  // round-trip time
 
       // Find the paramC+1 nodes with lowest latency (+1 because self is one of them)
       QuickSelect.shuffle();
-      QuickSelect.quickSelect(distances, paramC+1);
+      QuickSelect.quickSelect(distances, paramC*2 /*paramC+1*/ );
 
       // Set the close peers
       int upstreamCount = 0;
@@ -100,6 +106,51 @@ public class InitializerCR implements Control
           otherProt.addNeighbor(thisPeer);
         }
       }
+    }
+  }
+
+
+
+  private void setCloseLinksBidirectional()
+  {
+    if (paramC == 0)
+      return;
+
+    int[] distances = new int[Network.size()];
+
+    // Go through each and every node
+    for (int i=0; i<Network.size(); i++)
+    {
+      // Find this node's closest peers
+      Node thisNode = Network.get(i);
+      Linkable thisLinkable = (Linkable) thisNode.getProtocol(pid);
+      Peer thisPeer = thisNode.getProtocol(pid).myPeer();
+
+      // Compute RTT distances to all other nodes
+      for (int j=0; j<Network.size(); j++)
+        distances[j] = latency(j,i) + latency(i,j);  // round-trip time
+
+
+      // Find the 'numClosest' nodes with lowest latency
+      int numClosest = paramC*5;
+      QuickSelect.shuffle();
+      QuickSelect.quickSelect(distances, numClosest);
+
+      // Set the close peers
+      int count = 0;
+      for (int j=0; j<numClosest; j++)
+      {
+        int closeNeighborID = QuickSelect.ids[j];
+
+        Node otherNode = Network.get(closeNeighborID); 
+        Peer otherPeer = otherNode.getProtocol(pid).myPeer();
+        Linkable otherLinkable = (Linkable) otherNode.getProtocol(pid);
+
+        if (setBidirectionalLink(thisLinkable, thisPeer, otherLinkable, otherPeer))
+          if (++count == paramC)
+            break;
+      }
+      assert(count==paramC): "\nNot enough close peers!\nIncrease the 2nd parameter of quickSelect().";
     }
   }
 
@@ -149,6 +200,52 @@ public class InitializerCR implements Control
 
 
 
+  private boolean setBidirectionalLink(Linkable protA, Peer peerA, Linkable protB, Peer peerB)
+  {
+    if (peerA.equals(peerB))
+      return false;
+
+    if (protA.contains(peerB))
+      return false;
+
+    protA.addNeighbor(peerB);
+    protB.addNeighbor(peerA);
+    return true;
+  }
+
+
+
+  private void setRandomLinksBidirectional()
+  {
+    if (paramR == 0)
+      return;
+
+    // Set the random peers
+    for (int i=0; i<Network.size(); i++)
+    {
+      Node thisNode = Network.get(i);
+      Linkable thisLinkable = (Linkable) thisNode.getProtocol(pid);
+      Peer thisPeer = thisNode.getProtocol(pid).myPeer();
+
+      int j = 0;
+      int count = 0;
+      while (true)
+      {
+        int randomNeighborID = CommonState.r.nextInt(Network.size());
+
+        Node otherNode = Network.get(randomNeighborID); 
+        Peer otherPeer = otherNode.getProtocol(pid).myPeer();
+        Linkable otherLinkable = (Linkable) otherNode.getProtocol(pid);
+
+        if (setBidirectionalLink(thisLinkable, thisPeer, otherLinkable, otherPeer))
+          if (++count == paramR)
+            break;
+      }
+    }
+  }
+
+
+
   private void setPerfectMatchingRandomLinks()
   {
     if (paramR == 0)
@@ -186,9 +283,18 @@ public class InitializerCR implements Control
   @Override
   public boolean execute()
   {
-    setCloseLinks();
-    setRandomLinks();
-    //setPerfectMatchingRandomLinks();
+    if (bidirectional)
+    {
+      setCloseLinksBidirectional();
+      setRandomLinksBidirectional();
+      //setPerfectMatchingRandomLinks();
+    }
+    else
+    {
+      setCloseLinks();
+      setRandomLinks();
+      //setPerfectMatchingRandomLinks();
+    }
 
     return false;
   }

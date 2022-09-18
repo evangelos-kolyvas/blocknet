@@ -4,6 +4,8 @@
  */
 package base;
 
+import java.util.Random;
+
 import peernet.config.Configuration;
 import peernet.core.CommonState;
 import peernet.core.Control;
@@ -16,10 +18,18 @@ public class BlockGeneration implements Control
   int disseminationPid;
   int blockId = 0;
   int blocks;
+  long blockCompletionTime = -1;
 
   // Skip every 'skip' blocks
   int skip;
   int count=0;
+
+  /** 
+   *  We are using a local random number generator, so that the same
+   *  miners (and in the same order) are picked to generate blocks for
+   *  every single experiment. 
+   */
+  private static Random rng = new Random(0);
 
   public BlockGeneration(String prefix)
   {
@@ -29,25 +39,15 @@ public class BlockGeneration implements Control
   }
 
 
-
-  @Override
-  public boolean execute()
+  protected boolean generateBlock()
   {
-    // End experiment when #blocks has been reached
-    if (blockId == blocks)
-      return true;
-
-    // Skip one every 'skip' blocks.
-    if (skip > 0 && count++ % skip == 0)
-      return false;
-
     BaseDissemination d = null;
 
     int r;
     do
     {
       // Pick a random node as miner
-      r = CommonState.r.nextInt(Network.size());
+      r = rng.nextInt(Network.size());
 
       System.out.print("Mining block "+blockId+" at node "+r+" time "+CommonState.getTime());
 
@@ -67,5 +67,33 @@ public class BlockGeneration implements Control
     //System.err.print("\r#block "+blockId);
 
     return false;
+  }
+
+
+
+  /**
+   *  Allow 10 simulation seconds after the last block has been generated,
+   *  and then end the simulation.
+   */
+  @Override
+  public boolean execute()
+  {
+    // End experiment 10000ms after the number of blocks has been reached
+    if (blockId == blocks)
+    {
+      if (blockCompletionTime == -1)
+        blockCompletionTime = CommonState.getTime();
+      
+      if (CommonState.getTime() - blockCompletionTime > 10000)  //XXX ugly: Should be higher than the max anticipated dissemination time
+        return true;
+      else
+        return false;
+    }
+
+    // Skip one every 'skip' blocks.
+    if (skip > 0 && count++ % skip == 0)
+      return false;
+
+    return generateBlock();
   }
 }
