@@ -39,6 +39,7 @@ public class Stats implements Control
 
   // The highest block ID number seen so far (to deal with data array sizes)
   static int highestReportedBlockId = -1;
+  static int highestDisplayedBlockId = 0;
 
   static int chainTip = -1;
   static int blocksOnChain = 0;
@@ -93,9 +94,9 @@ public class Stats implements Control
       }
     }
 
-    deliveryTimesArray.get(blockId).add(time);
-    int h = deliveryHopsArray.get(blockId).getOrDefault(hops, Integer.valueOf(0));
-    deliveryHopsArray.get(blockId).put(hops, h+1);
+    deliveryTimesArray.get(blockId-highestDisplayedBlockId).add(time);
+    int h = deliveryHopsArray.get(blockId-highestDisplayedBlockId).getOrDefault(hops, Integer.valueOf(0));
+    deliveryHopsArray.get(blockId-highestDisplayedBlockId).put(hops, h+1);
 
     maxTime = Math.max(time, maxTime);
     maxHops = Math.max(hops, maxHops);
@@ -393,6 +394,7 @@ public class Stats implements Control
       deliveryHopsArray.clear();
       maxTime = -1;
       maxHops = -1;
+      highestDisplayedBlockId = highestReportedBlockId+1;
     }
     catch (IOException e)
     {
