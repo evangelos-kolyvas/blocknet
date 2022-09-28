@@ -116,9 +116,9 @@ public class InitializerCR implements Control
       QuickSelect.quickSelect(distances, topK);
       if (bidirectional)
       {
-        dump(distances, topK);
+        //dump(distances, topK);
         QuickSelect.sortFirstItems(topK);
-        dump(distances, topK);
+        //dump(distances, topK);
       }
 
 
