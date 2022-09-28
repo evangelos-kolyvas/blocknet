@@ -125,8 +125,8 @@ public abstract class Perigee extends BaseDissemination
 
 
   /**
-   * Given an address, it returns the index of that peer in 'outgoingSelections',
-   * if there, or null, if not there.
+   * If I have a neighbor with address {@code addr}, returns its index in my 'outgoingSelections'.
+   * Else, return -1.
    * 
    * @param addr
    * @return
