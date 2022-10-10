@@ -85,7 +85,10 @@ public class CR extends BaseDissemination
   }
 
 
-
+  /**
+   * Adds {@code neighbor} as an upstream peer.
+   * Effectively, it adds myself as a downstream peer on that node.
+   */
   @Override
   public boolean addNeighbor(Peer neighbor)
   {
