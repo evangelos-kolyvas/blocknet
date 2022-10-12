@@ -381,11 +381,11 @@ public class Stats implements Control
     {
       printVerticalAvg();
       //printVerticalAvgExhaustive();
-      //printHorizontalAvg();
+      printHorizontalAvg();
 
       //printAllTimes();
-      //printAllTimesPerMiner();
-      //printAllHops();
+      printAllTimesPerMiner();
+      printAllHops();
       //printThroughput();
 
       // Finally, reset all data, to prepare for next measurements
