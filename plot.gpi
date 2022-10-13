@@ -1,0 +1,20 @@
+set datafile separator "\t"
+set border 15
+set grid
+set terminal pdf
+set xlabel "Dissemination time (msec)"
+set ylabel "Undiscovered nodes (%)"
+set logscale y
+
+
+set output 'time_avg.pdf'
+plot "cr.times.avg" using 1:($2/10) lw 3 with lines title "c5r5", \
+     "hybr.times.avg" index 127 using 1:($2/10) lw 3 with lines title "hybr", \
+     "scor.times.avg" index 127 using 1:($2/10) lw 3 with lines title "scor"
+unset title
+
+set output 'time_alt.pdf'
+plot "cr.times.alt" using 1:($2/10) lw 3 with lines title "c5r5", \
+     "hybr.times.alt" index 127 using 1:($2/10) lw 3 with lines title "hybr", \
+     "scor.times.alt" index 127 using 1:($2/10) lw 3 with lines title "scor"
+unset title
