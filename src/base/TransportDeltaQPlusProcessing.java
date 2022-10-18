@@ -13,7 +13,7 @@ public class TransportDeltaQPlusProcessing extends TransportDeltaQ
   private static final String PAR_MIN = "processingMin";
   private static final String PAR_MAX = "processingMax";
 
-  int[] processingTimes;
+  private final int[] processingTimes;
 
   public TransportDeltaQPlusProcessing(String prefix) {
     super(prefix);
