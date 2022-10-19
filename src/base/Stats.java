@@ -381,7 +381,7 @@ public class Stats implements Control
     {
       printVerticalAvg();
       //printVerticalAvgExhaustive();
-      printHorizontalAvg();
+      //printHorizontalAvg();
 
       //printAllTimes();
       //printAllTimesPerMiner();
