@@ -2,27 +2,42 @@ package base;
 
 import peernet.config.Configuration;
 import peernet.core.CommonState;
+import peernet.core.Engine;
 import peernet.core.Network;
 import peernet.core.Node;
 import peernet.transport.Address;
 import peernet.transport.AddressSim;
 import peernet.transport.RouterNetwork;
+import peernet.transport.Transport;
 
-public class TransportDeltaQPlusProcessing extends TransportDeltaQ
+public class TransportProcessing extends Transport
 {
+  static boolean body;
+
+  static int extra_tcp_trips;
   private static final String PAR_MIN = "processingMin";
   private static final String PAR_MAX = "processingMax";
 
   private final int[] processingTimes;
 
-  public TransportDeltaQPlusProcessing(String prefix) {
-    super(prefix);
+  public TransportProcessing(String prefix) {
+    assert Engine.getAddressType()== Engine.AddressType.SIM;
     int min = Configuration.getInt(prefix + "." + PAR_MIN);
     int max = Configuration.getInt(prefix + "." + PAR_MAX);
     processingTimes = new int[Network.size()];
     for (int i = 0; i < processingTimes.length; i++) {
       processingTimes[i] = CommonState.r.nextInt(max-min) + min;
     }
+  }
+
+  public static void setBody(boolean _body)
+  {
+    body = _body;
+  }
+
+  public static void setBodyExtraRoundTrips(int trips)
+  {
+    extra_tcp_trips = trips;
   }
 
   @Override
